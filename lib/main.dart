@@ -1,121 +1,221 @@
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/material.dart';
 
-void main() {
-  runApp(const MyApp());
+import 'screens/documents_screen.dart';
+import 'screens/hisab_screen.dart';
+import 'screens/khet_screen.dart';
+import 'services/storage_backup_service.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await StorageBackupService.instance.initialize();
+  runApp(const KhataApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class KhataApp extends StatelessWidget {
+  const KhataApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
+    const seed = Color(0xFF176B52);
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'KHATA',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: seed),
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFFF7F8F5),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFFF7F8F5),
+          surfaceTintColor: Colors.transparent,
+        ),
+        cardTheme: CardThemeData(
+          color: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFFE8ECE8)),
+          ),
+        ),
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const KhataHome(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class KhataHome extends StatefulWidget {
+  const KhataHome({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<KhataHome> createState() => _KhataHomeState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _KhataHomeState extends State<KhataHome> {
+  int _tab = 0;
+  final _storage = StorageBackupService.instance;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  Future<void> _notify(Future<void> Function() task, String success) async {
+    try {
+      await task();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(success)),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not complete action: $error')),
+        );
+      }
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+  Future<void> _showBackupActions() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            ListTile(
+              leading: const Icon(Icons.cloud_upload_outlined),
+              title: const Text('Back up to Google Drive'),
+              onTap: () {
+                Navigator.pop(context);
+                _notify(_storage.backupToDrive, 'Backup uploaded to Drive');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.cloud_download_outlined),
+              title: const Text('Restore from Google Drive'),
+              onTap: () {
+                Navigator.pop(context);
+                _notify(_storage.restoreFromDrive, 'Backup restored');
+              },
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+
+  Future<void> _showSettings() async {
+    final folderController = TextEditingController(text: _storage.folderPath);
+    final senderController = TextEditingController(text: _storage.senderName);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Settings'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: senderController,
+                decoration: const InputDecoration(labelText: 'Sender name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: folderController,
+                decoration: InputDecoration(
+                  labelText: 'Local KHATA folder',
+                  suffixIcon: IconButton(
+                    tooltip: 'Choose folder',
+                    icon: const Icon(Icons.folder_open),
+                    onPressed: () async {
+                      final path = await _storage.pickFolder();
+                      if (path != null) {
+                        setDialogState(() => folderController.text = path);
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Media and khata_database.json are copied to this folder.',
+                style: TextStyle(fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                try {
+                  await _storage.setFolder(folderController.text);
+                  await _storage.setSenderName(senderController.text);
+                  if (mounted) Navigator.pop(dialogContext);
+                } catch (error) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Could not save settings: $error')),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+    folderController.dispose();
+    senderController.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final titles = ['HISAB', 'KHET', 'DOCUMENTS'];
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          titles[_tab],
+          style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.1),
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Backup and restore',
+            onPressed: _showBackupActions,
+            icon: const Icon(Icons.backup_outlined),
+          ),
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: _showSettings,
+            icon: const Icon(Icons.settings_outlined),
+          ),
+        ],
+      ),
+      body: IndexedStack(
+        index: _tab,
+        children: const [
+          HisabScreen(),
+          KhetScreen(),
+          DocumentsScreen(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tab,
+        onDestinationSelected: (index) => setState(() => _tab = index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined),
+            selectedIcon: Icon(Icons.receipt_long),
+            label: 'HISAB',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.agriculture_outlined),
+            selectedIcon: Icon(Icons.agriculture),
+            label: 'KHET',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.folder_copy_outlined),
+            selectedIcon: Icon(Icons.folder_copy),
+            label: 'DOCUMENTS',
+          ),
+        ],
       ),
     );
   }
