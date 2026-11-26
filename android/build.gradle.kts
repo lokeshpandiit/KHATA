@@ -20,8 +20,8 @@ subprojects {
 }
 
 subprojects {
-    plugins.withId("com.android.library") {
-        afterEvaluate {
+    afterEvaluate {
+        if (plugins.hasPlugin("com.android.library")) {
             val androidExtension = extensions.findByName("android")
                 ?: error("Android extension not found for $path")
             val compileSdkSetter = androidExtension.javaClass.methods.firstOrNull {
