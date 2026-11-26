@@ -397,7 +397,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         'note': _note.text.trim(),
         'date': now.toIso8601String(),
       });
-      if (mounted) Navigator.pop(context);
+      if (!context.mounted) return;
+      Navigator.pop(context);
     } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not save Pani hisab: $error')),
@@ -557,7 +558,8 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
         'billPhoto': _billPhoto,
         'date': now.toIso8601String(),
       });
-      if (mounted) Navigator.pop(context);
+      if (!context.mounted) return;
+      Navigator.pop(context);
     } catch (error) {
       _error('Could not save Khet entry: $error');
     } finally {
