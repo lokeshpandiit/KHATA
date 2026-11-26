@@ -19,6 +19,20 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+subprojects {
+    plugins.withId("com.android.library") {
+        afterEvaluate {
+            val androidExtension = extensions.findByName("android")
+                ?: error("Android extension not found for $path")
+            val compileSdkSetter = androidExtension.javaClass.methods.firstOrNull {
+                (it.name == "setCompileSdk" || it.name == "setCompileSdkVersion") &&
+                    it.parameterTypes.singleOrNull() == Int::class.javaPrimitiveType
+            } ?: error("Could not configure compileSdk for $path")
+            compileSdkSetter.invoke(androidExtension, 36)
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
