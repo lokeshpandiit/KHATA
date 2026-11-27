@@ -667,11 +667,14 @@ class AddPaniScreen extends StatefulWidget {
 class _AddPaniScreenState extends State<AddPaniScreen> {
   final _storage = StorageBackupService.instance;
   final _minutes = TextEditingController();
+  final _ownMinutes = TextEditingController();
+  final _borrowedMinutes = TextEditingController();
   final _wetKyaris = TextEditingController();
   final _note = TextEditingController();
   String? _contactId;
   String? _plotId;
   String _source = 'Tubewell';
+  bool _borrowedWater = false;
   String _direction = 'Diya';
   String _season = 'Rabi';
   int _year = DateTime.now().year;
@@ -699,6 +702,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   @override
   void dispose() {
     _minutes.dispose();
+    _ownMinutes.dispose();
+    _borrowedMinutes.dispose();
     _wetKyaris.dispose();
     _note.dispose();
     super.dispose();
@@ -743,12 +748,15 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   }
 
   Future<void> _save() async {
-    final minutes = int.tryParse(_minutes.text.trim()) ?? 0;
+    final plotMode = widget.initialPlotId != null;
+    final ownMinutes = int.tryParse(_ownMinutes.text.trim()) ?? 0;
+    final borrowedMinutes = int.tryParse(_borrowedMinutes.text.trim()) ?? 0;
+    final minutes = plotMode ? ownMinutes + (_borrowedWater ? borrowedMinutes : 0) : (int.tryParse(_minutes.text.trim()) ?? 0);
     if (minutes <= 0) {
       _error('Enter a valid number of minutes');
       return;
     }
-    if (_contactId == null) {
+    if (!plotMode && _contactId == null) {
       _error('Pick a phone contact before saving Pani hisab');
       return;
     }
@@ -765,10 +773,12 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
       return;
     }
 
+    if (plotMode && _borrowedWater && borrowedMinutes <= 0) { _error('Extra pani ke minutes enter karein'); return; }
+    if (plotMode && _borrowedWater && _contactId == null) { _error('Pani kis se liya, contact select karein'); return; }
     setState(() => _saving = true);
     try {
       final now = DateTime.now();
-      final contact = _contacts.firstWhere((item) => item['id'] == _contactId);
+      final contact = _contactId == null ? null : _contacts.firstWhere((item) => item['id'] == _contactId);
       final entryDate = DateTime(
         _activityDate.year, _activityDate.month, _activityDate.day,
         now.hour, now.minute,
@@ -778,11 +788,16 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         'type': 'PANI',
         'contactId': _contactId,
         'plotId': _plotId,
-        'contact': contact['name'],
-        'contactPhone': contact['phone'],
+        'contact': contact?['name'],
+        'contactPhone': contact?['phone'],
         'source': _source,
-        'direction': _direction,
+        'direction': plotMode ? (_borrowedWater ? 'Apni baari + Liya' : 'Apni baari') : _direction,
         'minutes': minutes,
+        'ownMinutes': plotMode ? ownMinutes : null,
+        'borrowedMinutes': plotMode && _borrowedWater ? borrowedMinutes : 0,
+        'borrowedWater': plotMode && _borrowedWater,
+        'borrowedContact': plotMode && _borrowedWater ? contact?['name'] : null,
+        'borrowedContactId': plotMode && _borrowedWater ? _contactId : null,
         'wetKyaris': _wetCount,
         'totalKyarisSnapshot': _totalKyaris,
         'remainingKyaris': _remainingKyaris,
@@ -808,6 +823,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (widget.initialPlotId == null || _borrowedWater) ...[
           OutlinedButton.icon(
             onPressed: _pickContact,
             icon: const Icon(Icons.contacts_outlined),
@@ -825,6 +841,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
               onChanged: (value) => setState(() => _contactId = value),
             ),
           const SizedBox(height: 12),
+          ],
           KhetPlotDropdown(selectedId: _plotId, onChanged: (value) {
             setState(() { _plotId = value; _wetKyaris.clear(); });
           }),
@@ -874,26 +891,43 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
           DropdownButtonFormField<String>(
             initialValue: _source,
             decoration: const InputDecoration(labelText: 'Pani Source'),
-            items: ['Tubewell', 'Nahar'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+            items: ['Tubewell', 'Nahar', 'Mix'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
             onChanged: (value) => setState(() => _source = value ?? _source),
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _direction,
-            decoration: const InputDecoration(labelText: 'Len-Den'),
-            items: ['Diya', 'Liya'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
-            onChanged: (value) => setState(() => _direction = value ?? _direction),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _minutes,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: 'Paani kitne minute chala?',
-              helperText: 'Duration: ' + formatMinutes(int.tryParse(_minutes.text) ?? 0),
+          if (widget.initialPlotId != null) ...[
+            DropdownButtonFormField<bool>(
+              initialValue: _borrowedWater,
+              decoration: const InputDecoration(labelText: 'Pani ki baari'),
+              items: const [
+                DropdownMenuItem(value: false, child: Text('Apni baari ka pani')),
+                DropdownMenuItem(value: true, child: Text('Apni baari + kisi se extra pani')),
+              ],
+              onChanged: (value) => setState(() { _borrowedWater = value ?? false; if (!_borrowedWater) _contactId = null; }),
             ),
-            onChanged: (_) => setState(() {}),
-          ),
+            const SizedBox(height: 12),
+            TextField(controller: _ownMinutes, keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Apne pani ke minutes')),
+            if (_borrowedWater) ...[
+              const SizedBox(height: 12),
+              TextField(controller: _borrowedMinutes, keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Dusre se extra liye pani ke minutes')),
+            ],
+            const SizedBox(height: 8),
+            Text('Total: ' + formatMinutes((int.tryParse(_ownMinutes.text) ?? 0) + (_borrowedWater ? (int.tryParse(_borrowedMinutes.text) ?? 0) : 0))),
+          ] else ...[
+            DropdownButtonFormField<String>(
+              initialValue: _direction,
+              decoration: const InputDecoration(labelText: 'Len-Den'),
+              items: ['Diya', 'Liya'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+              onChanged: (value) => setState(() => _direction = value ?? _direction),
+            ),
+            const SizedBox(height: 12),
+            TextField(controller: _minutes, keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: 'Paani kitne minute chala?', helperText: 'Duration: ' + formatMinutes(int.tryParse(_minutes.text) ?? 0)),
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
           const SizedBox(height: 12),
           TextField(controller: _note, minLines: 2, maxLines: 4,
             decoration: const InputDecoration(labelText: 'Note (jaise: shaam ko uski baari ke baad)')),
