@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../services/storage_backup_service.dart';
-import '../widgets/khet_map_widget.dart';
+import '../widgets/khet_map_widget.dart';\nimport '../widgets/plot_selector.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -80,7 +80,7 @@ class DashboardScreen extends StatelessWidget {
       recent.add(_Recent(
         type,
         row['type'] == 'PANI'
-            ? 'Pani · ${row['plotId'] == null ? 'Khet' : row['plotId']}'
+            ? 'Pani · ${row['plotId'] == null ? 'Khet' : plotLabelForId(storage, row['plotId'])}'
             : (row['title'] ?? row['contact'] ?? row['customerName'] ?? row['type'] ?? 'Khet').toString(),
         _amount(row['price'] ?? row['totalAmount']),
         _date(row),
