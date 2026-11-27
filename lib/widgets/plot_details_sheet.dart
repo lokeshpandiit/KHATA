@@ -227,8 +227,16 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                     icon: const Icon(Icons.pets_outlined), label: const Text('Add Hara Beej'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'DAWAI', initialPlotId: widget.plot['id'] as String))),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'DAWAI', initialPlotId: widget.plot['id'] as String, initialSeason: _season, initialYear: _year))),
                     icon: const Icon(Icons.medication_outlined), label: const Text('Add Dawai'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'KHAD', initialPlotId: widget.plot['id'] as String, initialSeason: _season, initialYear: _year))),
+                    icon: const Icon(Icons.science_outlined), label: const Text('Add Khaad'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: latestCrop == null ? null : () => _markHarvested(latestCrop),
+                    icon: const Icon(Icons.agriculture_outlined), label: const Text('Crop Cutting'),
                   ),
                 ])
               else
