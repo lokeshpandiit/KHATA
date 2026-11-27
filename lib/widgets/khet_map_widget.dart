@@ -142,7 +142,7 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
           child: AspectRatio(
-            aspectRatio: 4 / 3,
+            aspectRatio: 1 / 1,
             child: LayoutBuilder(builder: (context, constraints) {
               final width = constraints.maxWidth;
               final height = constraints.maxHeight;
