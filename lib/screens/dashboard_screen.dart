@@ -162,18 +162,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  double _balance(Map<String, dynamic> row) {
-    final explicit = row['balance'];
-    if (explicit is num) return explicit.toDouble();
-    final total = _amount(row['totalAmount'] ?? row['price']);
-    final paid = _amount(row['paidAmount']);
-    return (total - paid).clamp(0, double.infinity).toDouble();
-  }
-
-  double _amount(dynamic value) {
-    if (value is num) return value.toDouble();
-    return double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
-  }
 }
 
 class _Recent {
