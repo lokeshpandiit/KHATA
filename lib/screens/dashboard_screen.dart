@@ -45,30 +45,11 @@ class DashboardScreen extends StatelessWidget {
     final hisabs = storage.records('hisabs');
     final khet = storage.records('khet');
     final now = DateTime.now();
-    final monthStart = DateTime(now.year, now.month, 1);
-    final monthEnd = DateTime(now.year, now.month + 1, 0);
-    bool thisMonth(Map<String, dynamic> row) {
-      final date = _date(row);
-      return date != null && date.year == now.year && date.month == now.month;
-    }
-    final monthHisabAmount = hisabs.where(thisMonth).fold<double>(
-      0, (sum, row) => sum + _amount(row['amount']),
-    );
-    final monthKhetAmount = khet.where(thisMonth)
-        .where((row) => row['type'] != 'PANI' && row['type'] != 'TRACTOR')
-        .fold<double>(0, (sum, row) => sum + _amount(row['price']));
-    final monthPani = khet.where(thisMonth).where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON').fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
-    final monthTractorAmount = khet.where(thisMonth).where((row) => row['type'] == 'TRACTOR').fold<double>(0, (sum, row) => sum + _amount(row['price'] ?? row['totalAmount']));
-    final recent = <_RecentItem>[
-      ...hisabs.map((row) => _RecentItem(type: 'HISAB', title: (row['personName'] ?? row['category'] ?? 'Hisab').toString(), date: _date(row), amount: _amount(row['amount']), direction: (row['direction'] ?? '').toString(), details: (row['note'] ?? '').toString())),
-      ...khet.map((row) => _RecentItem(type: (row['type'] ?? 'KHET').toString(), title: (row['title'] ?? row['cropName'] ?? row['work'] ?? row['type'] ?? 'Khet entry').toString(), date: _date(row), amount: _amount(row['price'] ?? row['amount']), direction: (row['direction'] ?? '').toString(), details: (row['note'] ?? row['contact'] ?? '').toString())),
-    ]..sort((a, b) => (b.date ?? DateTime(0)).compareTo(a.date ?? DateTime(0)));
     final pending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0).toList()
       ..sort((a, b) => (DateTime.tryParse(a['dueDate'] as String? ?? '') ?? DateTime(9999))
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '') ?? DateTime(9999)));
     final pendingTotal = pending.fold<double>(0, (sum, row) => sum + _balance(row));
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
-    final range = '${DateFormat('dd MMM yyyy').format(monthStart)} – ${DateFormat('dd MMM yyyy').format(monthEnd)}';
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -80,7 +61,13 @@ class DashboardScreen extends StatelessWidget {
         const KhetMapWidget(),
         const SizedBox(height: 18),
         Row(children: [
-          Expanded(child: _MetricCard(title: 'Pending payments', value: money.format(pendingTotal), icon: Icons.pending_actions, tint: const Color(0xFFE5F2EC))),
+          Expanded(child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => _PendingPaymentsScreen(rows: pending, money: money),
+            )),
+            child: _MetricCard(title: 'Pending payments', value: money.format(pendingTotal), icon: Icons.pending_actions, tint: const Color(0xFFE5F2EC)),
+          )),
           const SizedBox(width: 10),
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
@@ -102,63 +89,7 @@ class DashboardScreen extends StatelessWidget {
             child: _MetricCard(title: 'Pani total', value: '${monthPani ~/ 60}h ${monthPani % 60}m', icon: Icons.water_drop, tint: const Color(0xFFE7F3FA)),
           )),
         ]),
-        const SizedBox(height: 22),
-        const Text('This month at a glance', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 3),
-        Text(range, style: const TextStyle(color: Colors.black54, fontSize: 12)),
         const SizedBox(height: 8),
-        Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(children: [
-          _SummaryLine(label: 'Hisab records', value: hisabs.where(thisMonth).length.toString()),
-          const Divider(height: 18),
-          _SummaryLine(label: 'Khet records', value: khet.where(thisMonth).where((r) => r['type'] != 'PANI').length.toString()),
-          const Divider(height: 18),
-          _SummaryLine(label: 'Pani entries', value: khet.where(thisMonth).where((r) => r['type'] == 'PANI' && r['ledgerMode'] != 'PERSON').length.toString()),
-          const Divider(height: 18),
-          _SummaryLine(label: 'Tractor work amount', value: money.format(monthTractorAmount)),
-          const Divider(height: 18),
-          _SummaryLine(label: 'Combined entries amount', value: money.format(monthHisabAmount + monthKhetAmount + monthTractorAmount), bold: true),
-        ]))),
-        const SizedBox(height: 20),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Pending tractor payments', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-            Text(money.format(pendingTotal), style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w800)),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (pending.isEmpty)
-          const Card(child: Padding(padding: EdgeInsets.all(14), child: Text('No pending tractor payments.')))
-        else
-          ...pending.take(6).map((row) {
-            final due = DateTime.tryParse(row['dueDate'] as String? ?? '');
-            final isOverdue = due != null && due.isBefore(DateTime(now.year, now.month, now.day));
-            return Card(
-              margin: const EdgeInsets.only(bottom: 7),
-              child: ListTile(
-                leading: Icon(Icons.pending_actions, color: isOverdue ? Colors.red : Colors.orange),
-                title: Text((row['customerName'] ?? row['contact'] ?? 'Customer').toString()),
-                subtitle: Text('${row['work'] ?? row['title'] ?? 'Tractor work'}${due == null ? '' : ' · Due ${DateFormat('dd MMM yyyy').format(due)}'}'),
-                trailing: Text(money.format(_balance(row)), style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
-              ),
-            );
-          }),
-        const SizedBox(height: 18),
-        const Text('Recent activity', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        if (recent.isEmpty) const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No records yet. Add your first entry in HISAB or KHET.'))),
-        ...recent.take(8).map((item) => Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: CircleAvatar(child: Icon(item.type == 'HISAB' ? Icons.receipt_long : item.type == 'PANI' ? Icons.water_drop : Icons.agriculture)),
-            title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text('${item.type} · ${item.date == null ? 'Date unavailable' : DateFormat('dd MMM, hh:mm a').format(item.date!)}${item.details.isEmpty ? '' : '\\n${item.details}'}'),
-            trailing: item.amount > 0
-                ? Text('${item.direction == 'PAID' ? '−' : '+'}${money.format(item.amount)}',
-                    style: TextStyle(color: item.direction == 'PAID' ? Colors.red : Colors.green, fontWeight: FontWeight.w700))
-                : null,
-          ),
-        )),
       ],
     );
   }
@@ -474,4 +405,65 @@ class _PersonMonthDetailScreen extends StatelessWidget {
       ]),
     );
   }
+
+class _PendingPaymentsScreen extends StatelessWidget {
+  const _PendingPaymentsScreen({required this.rows, required this.money});
+  final List<Map<String, dynamic>> rows;
+  final NumberFormat money;
+
+  double _amount(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
+  }
+
+  double _balance(Map<String, dynamic> row) {
+    final explicit = row['balance'];
+    if (explicit is num) return explicit.toDouble();
+    return (_amount(row['totalAmount'] ?? row['price']) - _amount(row['paidAmount'])).clamp(0, double.infinity).toDouble();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = rows.fold<double>(0, (sum, row) => sum + _balance(row));
+    return Scaffold(
+      appBar: AppBar(title: const Text('All pending tractor payments')),
+      body: rows.isEmpty
+          ? const Center(child: Text('Koi pending payment nahi hai.'))
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Total pending amount', style: TextStyle(color: Colors.black54)),
+                    const SizedBox(height: 5),
+                    Text(money.format(total), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red)),
+                    Text('${rows.length} pending records'),
+                  ]),
+                )),
+                const SizedBox(height: 8),
+                ...rows.map((row) {
+                  final due = DateTime.tryParse(row['dueDate'] as String? ?? '');
+                  final customer = (row['customerName'] ?? row['contact'] ?? 'Customer').toString();
+                  final work = (row['work'] ?? row['title'] ?? 'Tractor work').toString();
+                  final amount = _amount(row['totalAmount'] ?? row['price']);
+                  final paid = _amount(row['paidAmount']);
+                  final isOverdue = due != null && due.isBefore(DateTime.now());
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 9),
+                    child: ListTile(
+                      isThreeLine: true,
+                      leading: Icon(Icons.pending_actions, color: isOverdue ? Colors.red : Colors.orange),
+                      title: Text(customer),
+                      subtitle: Text('${work}\nTotal: ${money.format(amount)} · Paid: ${money.format(paid)}${due == null ? '' : ' · Due: ${DateFormat('dd MMM yyyy').format(due)}'}'),
+                      trailing: Text(money.format(_balance(row)), style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
+                    ),
+                  );
+                }),
+              ],
+            ),
+    );
+  }
+}
+
 }
