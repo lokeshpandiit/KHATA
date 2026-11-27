@@ -451,18 +451,15 @@ class _KhetScreenState extends State<KhetScreen> {
       );
     }
     final date = DateTime.tryParse(row['date'] as String? ?? '');
-    final photos = _paths(row, 'itemPhotos', 'itemPhoto');
+    final photos = _paths(row, 'itemPhotos', 'itemPhoto') +
+        _paths(row, 'billPhotos', 'billPhoto');
+    final visiblePhotos = photos.toSet().toList();
     return Card(
       margin: const EdgeInsets.only(bottom: 9),
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            if (photos.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: InkWell(onTap: () => _preview(photos.first), child: mediaThumbnail(photos.first)),
-              ),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -476,6 +473,13 @@ class _KhetScreenState extends State<KhetScreen> {
                       style: const TextStyle(fontSize: 12, color: Colors.black54)),
                   if ((row['billPhoto'] as String? ?? '').isNotEmpty || (row['billPhotos'] as List? ?? []).isNotEmpty)
                     const Text('Bill photo attached', style: TextStyle(fontSize: 12)),
+                  if (visiblePhotos.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 7),
+                      child: Wrap(spacing: 6, runSpacing: 6, children: visiblePhotos.map((path) =>
+                        InkWell(onTap: () => _preview(path), child: mediaThumbnail(path, size: 58)),
+                      ).toList()),
+                    ),
                 ],
               ),
             ),
