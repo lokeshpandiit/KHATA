@@ -147,22 +147,26 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
               final width = constraints.maxWidth;
               final height = constraints.maxHeight;
               const left = 0.1268, top = 0.1615, cellWidth = 0.1683, cellHeight = 0.1497;
+              // Square viewport crops the unused side margins; adjust overlay coordinates to the cropped image.
+              const cropLeft = 0.125, cropWidth = 0.75;
+              final croppedLeft = (left - cropLeft) / cropWidth;
+              final croppedCellWidth = cellWidth / cropWidth;
               return ClipRRect(
                 borderRadius: BorderRadius.circular(11),
                 child: Stack(fit: StackFit.expand, children: [
-                  Image.asset('assets/khet_map.jpg', fit: BoxFit.fill),
+                  Image.asset('assets/khet_map.jpg', fit: BoxFit.cover),
                   for (final plot in plots)
                     Positioned(
                       // Expand the tap target around each plot center without moving its label.
-                      left: width * (left + (plot['column'] as num).toDouble() * cellWidth - cellWidth * 0.17),
+                      left: width * (croppedLeft + (plot['column'] as num).toDouble() * croppedCellWidth - croppedCellWidth * 0.17),
                       top: height * (top + (plot['row'] as num).toDouble() * cellHeight - cellHeight * 0.17),
-                      width: width * cellWidth * 1.34,
+                      width: width * croppedCellWidth * 1.34,
                       height: height * cellHeight * 1.34,
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
                           onTap: _editing ? () => _editPlot(plot) : () => _openPlotDetails(plot),
-                          child: Center(child: _plotBadge(plot, width * cellWidth)),
+                          child: Center(child: _plotBadge(plot, width * croppedCellWidth)),
                         ),
                       ),
                     ),
