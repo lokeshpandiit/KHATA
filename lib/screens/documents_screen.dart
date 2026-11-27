@@ -204,8 +204,8 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                           Wrap(
                             spacing: 12,
                             children: [
-                              ...bills.map((path) => _productPhoto('Bill', path)),
-                              ...warranties.map((path) => _productPhoto('Warranty', path)),
+                              ...bills.map((path) => _productPhoto('Bill', path, onDelete: () => _deleteProductPhoto(product, path, warranty: false))),
+                              ...warranties.map((path) => _productPhoto('Warranty', path, onDelete: () => _deleteProductPhoto(product, path, warranty: true))),
                             ],
                           ),
                           if (product['date'] is String)
@@ -226,16 +226,88 @@ class _DocumentsScreenState extends State<DocumentsScreen>
         ),
       );
 
-  Widget _productPhoto(String label, String path) => InkWell(
-        onTap: () => _preview(path),
-        child: Column(
-          children: [
-            mediaThumbnail(path, size: 78),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 12)),
-          ],
-        ),
+  Widget _productPhoto(
+    String label,
+    String path, {
+    required VoidCallback onDelete,
+  }) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            alignment: Alignment.topRight,
+            children: [
+              InkWell(
+                onTap: () => _preview(path),
+                child: mediaThumbnail(path, size: 78),
+              ),
+              IconButton(
+                tooltip: 'Delete $label photo',
+                visualDensity: VisualDensity.compact,
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(label, style: const TextStyle(fontSize: 12)),
+        ],
       );
+
+  Future<void> _deleteProductPhoto(
+    Map<String, dynamic> product,
+    String path, {
+    required bool warranty,
+  }) async {
+    final label = (product['name'] as String? ?? 'Product').trim();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete photo?'),
+        content: Text('Remove this ${warranty ? 'warranty' : 'bill'} photo from $label?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() {});
+    try {
+      final listKey = warranty ? 'warrantyPhotos' : 'billPhotos';
+      final legacyKey = warranty ? 'warrantyPhoto' : 'billPhoto';
+      final photos = (product[listKey] as List? ?? const [])
+          .whereType<String>()
+          .where((item) => item != path)
+          .toList();
+      final legacy = product[legacyKey] == path
+          ? (photos.isEmpty ? null : photos.first)
+          : product[legacyKey];
+      final updated = Map<String, dynamic>.from(product)
+        ..[listKey] = photos
+        ..[legacyKey] = legacy;
+      await _storage.updateRecord('products', product['id'] as String, updated);
+      if (!mounted) return;
+      setState(() {});
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        _error('Photo removed from KHATA, but its file could not be deleted.');
+        return;
+      }
+      _error('Photo deleted.');
+    } catch (error) {
+      _error('Could not delete photo: $error');
+    }
+  }
 
   void _preview(String path) {
     Navigator.of(context).push(
@@ -360,6 +432,61 @@ class _MemberDocumentsScreenState extends State<MemberDocumentsScreen> {
     }
   }
 
+  Future<void> _deleteDocument(String path) async {
+    final labels = Map<String, dynamic>.from(
+      widget.member['documentNames'] as Map? ?? const {},
+    );
+    final label = (labels[path] ?? path.split(Platform.pathSeparator).last).toString();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete document?'),
+        content: Text('Are you sure you want to delete "$label" from this member?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final documents = _documents.where((item) => item != path).toList();
+      labels.remove(path);
+      final updated = {
+        ...widget.member,
+        'documents': documents,
+        'documentNames': labels,
+      };
+      await _storage.updateRecord('members', widget.member['id'] as String, updated);
+      if (!mounted) return;
+      setState(() {
+        widget.member['documents'] = documents;
+        widget.member['documentNames'] = labels;
+      });
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } catch (_) {
+        _error('Document removed from KHATA, but its file could not be deleted.');
+        return;
+      }
+      _error('Document deleted.');
+    } catch (error) {
+      _error('Could not delete document: $error');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _shareDocument(String path, String label) async {
     await KhataSharingService.share(text: '$label - Personal document', files: [path]);
   }
@@ -417,10 +544,23 @@ class _MemberDocumentsScreenState extends State<MemberDocumentsScreen> {
                                 : const CircleAvatar(child: Icon(Icons.description_outlined)),
                             title: Text(((widget.member['documentNames'] as Map?)?[path] ?? path.split(Platform.pathSeparator).last).toString()),
                             onTap: isImage ? () => _preview(path) : () => _shareDocument(path, ((widget.member['documentNames'] as Map?)?[path] ?? 'Personal document').toString()),
-                            trailing: IconButton(
-                              tooltip: 'Share document',
-                              icon: const Icon(Icons.share_outlined),
-                              onPressed: () => _shareDocument(path, ((widget.member['documentNames'] as Map?)?[path] ?? 'Personal document').toString()),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  tooltip: 'Share document',
+                                  icon: const Icon(Icons.share_outlined),
+                                  onPressed: _busy ? null : () => _shareDocument(
+                                    path,
+                                    ((widget.member['documentNames'] as Map?)?[path] ?? 'Personal document').toString(),
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Delete document',
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  onPressed: _busy ? null : () => _deleteDocument(path),
+                                ),
+                              ],
                             ),
                           ),
                         );
