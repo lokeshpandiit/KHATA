@@ -143,6 +143,13 @@ class StorageBackupService {
     await _save();
   }
 
+  Future<void> deleteRecord(String category, String id) async {
+    final rows = _data[category];
+    if (rows == null) return;
+    rows.removeWhere((item) => item['id'] == id);
+    await _save();
+  }
+
   Future<void> updateRecord(
     String category,
     String id,

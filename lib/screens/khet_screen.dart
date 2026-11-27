@@ -273,6 +273,26 @@ class _KhetScreenState extends State<KhetScreen> {
     );
   }
 
+  Future<void> _deletePaniEntry(Map<String, dynamic> row) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Pani entry?'),
+        content: Text(
+          'Kya ' + (row['contact'] ?? 'Contact').toString() + ' ki ' + (row['direction'] ?? '').toString() + ' wali ' +
+          formatMinutes((row['minutes'] as num?)?.toInt() ?? 0) + ' entry delete karni hai? Delete karne ke baad yeh pani hisab/net balance mein nahi dikhegi.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await _storage.deleteRecord('khet', row['id'] as String);
+    if (mounted) setState(() {});
+  }
+
   Future<void> _recordTractorPayment(Map<String, dynamic> row) async {
     final controller = TextEditingController();
     final amount = await showDialog<double>(
@@ -477,10 +497,20 @@ class _KhetScreenState extends State<KhetScreen> {
             '${date == null ? '' : '\n${timeLabel(date)}'}',
           ),
           isThreeLine: (row['note'] as String? ?? '').isNotEmpty,
-          trailing: IconButton(
-            tooltip: 'Share Pani hisab',
-            onPressed: () => _sharePani(row),
-            icon: const Icon(Icons.share_outlined),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'Share Pani hisab',
+                onPressed: () => _sharePani(row),
+                icon: const Icon(Icons.share_outlined),
+              ),
+              IconButton(
+                tooltip: 'Delete Pani entry',
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: () => _deletePaniEntry(row),
+              ),
+            ],
           ),
         ),
       );
