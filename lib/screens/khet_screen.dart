@@ -821,10 +821,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   final _minutes = TextEditingController();
   final _ownMinutes = TextEditingController();
   final _borrowedMinutes = TextEditingController();
-  final _wetKyaris = TextEditingController();
   final _note = TextEditingController();
   String? _contactId;
-  String? _plotId;
   Map<String, int> _selectedPlots = {};
   String _source = 'Tubewell';
   String _wellType = 'Solar';
@@ -837,19 +835,9 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
 
   List<Map<String, dynamic>> get _contacts => _storage.records('contacts');
 
-  Map<String, dynamic>? get _selectedPlot {
-    final matches = _storage.records('plots').where((item) => item['id'] == _plotId);
-    return matches.isEmpty ? null : matches.first;
-  }
-
-  int get _totalKyaris => (_selectedPlot?['totalKyaris'] as num?)?.toInt() ?? 0;
-  int get _wetCount => int.tryParse(_wetKyaris.text.trim()) ?? 0;
-  int get _remainingKyaris => (_totalKyaris - _wetCount).clamp(0, _totalKyaris);
-
   @override
   void initState() {
     super.initState();
-    _plotId = widget.initialPlotId;
     if (widget.initialPlotId != null) {
       final plots = _storage.records('plots').where((p) => p['id'] == widget.initialPlotId);
       if (plots.isNotEmpty) {
@@ -878,7 +866,6 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
     _minutes.dispose();
     _ownMinutes.dispose();
     _borrowedMinutes.dispose();
-    _wetKyaris.dispose();
     _note.dispose();
     super.dispose();
   }
@@ -1084,7 +1071,6 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
               initialSelection: _selectedPlots,
               onChanged: (value) => setState(() {
                 _selectedPlots = value;
-                _plotId = value.isEmpty ? null : value.keys.first;
               }),
             ),
             const SizedBox(height: 8),
