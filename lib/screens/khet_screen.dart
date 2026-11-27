@@ -113,7 +113,7 @@ class _KhetScreenState extends State<KhetScreen> {
       context: context,
       builder: (context) => SafeArea(
         child: Wrap(
-          children: ['DAWAI', 'FASAL', 'HARA_BEEJ', 'PANI', 'TRACTOR', 'OTHER']
+          children: ['DAWAI', 'FASAL', 'TRACTOR', 'OTHER']
               .map((item) => ListTile(
                     leading: Icon(item == 'TRACTOR' ? Icons.agriculture : Icons.add_circle_outline),
                     title: Text(item),
@@ -488,7 +488,7 @@ class _KhetScreenState extends State<KhetScreen> {
     final months = availableMonths(_entries);
     if (!months.contains(_month)) _month = 'All months';
     final rows = _filtered;
-    const tabs = ['ALL', 'DAWAI', 'FASAL', 'HARA_BEEJ', 'PANI', 'TRACTOR', 'KUA', 'OTHER', 'PENDING'];
+    const tabs = ['ALL', 'DAWAI', 'FASAL', 'TRACTOR', 'KUA', 'OTHER', 'PENDING'];
     final addLabel = switch (_tab) {
       'DAWAI' => 'Add Dawai',
       'FASAL' => 'Add Fasal',
