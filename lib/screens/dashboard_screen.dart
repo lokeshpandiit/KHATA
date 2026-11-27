@@ -418,6 +418,7 @@ class _PersonMonthDetailScreen extends StatelessWidget {
       ]),
     );
   }
+}
 
 class _PendingPaymentsScreen extends StatelessWidget {
   const _PendingPaymentsScreen({required this.rows, required this.money});
@@ -477,6 +478,4 @@ class _PendingPaymentsScreen extends StatelessWidget {
             ),
     );
   }
-}
-
 }
