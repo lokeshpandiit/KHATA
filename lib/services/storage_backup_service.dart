@@ -28,6 +28,7 @@ class StorageBackupService {
     'members',
     'products',
     'plots',
+    'voiceNotes',
   ];
 
   Directory? _root;
