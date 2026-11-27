@@ -4,10 +4,19 @@ import 'package:intl/intl.dart';
 import '../screens/khet_screen.dart';
 import '../services/storage_backup_service.dart';
 import 'plot_selector.dart';
+import 'farm_fields.dart';
 
-class KhetPlotDetailsSheet extends StatelessWidget {
+class KhetPlotDetailsSheet extends StatefulWidget {
   const KhetPlotDetailsSheet({required this.plot, super.key});
   final Map<String, dynamic> plot;
+
+  @override
+  State<KhetPlotDetailsSheet> createState() => _KhetPlotDetailsSheetState();
+}
+
+class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
+  String _season = 'Rabi';
+  int _year = DateTime.now().year;
 
   DateTime? _date(Map<String, dynamic> row) {
     for (final key in ['date', 'sowingDate', 'applicationDate']) {
@@ -76,14 +85,18 @@ class KhetPlotDetailsSheet extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: storage.revision,
       builder: (context, _, __) {
-        final entries = _latest(storage.records('khet').where((row) => row['plotId'] == plot['id']).toList());
+        final entries = _latest(storage.records('khet').where((row) =>
+          row['plotId'] == widget.plot['id'] &&
+          row['season'] == _season &&
+          row['year'] == _year
+        ).toList());
         final pani = entries.where((row) => row['type'] == 'PANI').toList();
         final crops = entries.where((row) => row['type'] == 'FASAL').toList();
         final fodder = entries.where((row) => row['type'] == 'HARA_BEEJ').toList();
         final dawai = entries.where((row) => row['type'] == 'DAWAI').toList();
         final latestPani = pani.isEmpty ? null : pani.first;
         final latestCrop = crops.isEmpty ? null : crops.first;
-        final totalKyaris = (plot['totalKyaris'] as num?)?.toInt() ?? 0;
+        final totalKyaris = (widget.plot['totalKyaris'] as num?)?.toInt() ?? 0;
         final wetKyaris = (latestPani?['wetKyaris'] as num?)?.toInt() ?? 0;
         final remainingKyaris = latestPani == null
             ? totalKyaris
@@ -98,11 +111,20 @@ class KhetPlotDetailsSheet extends StatelessWidget {
               Center(child: Container(width: 38, height: 4, decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8)))),
               const SizedBox(height: 12),
               Row(children: [
-                Expanded(child: Text(plotLabel(plot), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
+                Expanded(child: Text(plotLabel(widget.plot), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900))),
                 IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
               ]),
-              if ((plot['name'] as String? ?? '').isNotEmpty)
-                Text(plot['name'] as String, style: const TextStyle(color: Colors.black54)),
+              if ((widget.plot['name'] as String? ?? '').isNotEmpty)
+                Text(widget.plot['name'] as String, style: const TextStyle(color: Colors.black54)),
+              const SizedBox(height: 10),
+              SeasonYearFields(
+                season: _season,
+                year: _year,
+                onSeasonChanged: (value) => setState(() => _season = value),
+                onYearChanged: (value) => setState(() => _year = value),
+              ),
+              const SizedBox(height: 8),
+              Text('Sirf $_season $_year ka khet record', style: const TextStyle(fontSize: 12, color: Colors.black54)),
               const SizedBox(height: 10),
               Expanded(
                 child: ListView(children: [
@@ -139,22 +161,22 @@ class KhetPlotDetailsSheet extends StatelessWidget {
                 ]),
               ),
               const SizedBox(height: 8),
-              if (plot['isMine'] == true)
+              if (widget.plot['isMine'] == true)
                 Wrap(spacing: 8, runSpacing: 8, children: [
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddPaniScreen(initialPlotId: plot['id'] as String))),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddPaniScreen(initialPlotId: widget.plot['id'] as String))),
                     icon: const Icon(Icons.water_drop_outlined), label: const Text('Add Pani'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'FASAL', initialPlotId: plot['id'] as String))),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'FASAL', initialPlotId: widget.plot['id'] as String))),
                     icon: const Icon(Icons.grass_outlined), label: const Text('Add Fasal'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'HARA_BEEJ', initialPlotId: plot['id'] as String))),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'HARA_BEEJ', initialPlotId: widget.plot['id'] as String))),
                     icon: const Icon(Icons.pets_outlined), label: const Text('Add Hara Beej'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'DAWAI', initialPlotId: plot['id'] as String))),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'DAWAI', initialPlotId: widget.plot['id'] as String))),
                     icon: const Icon(Icons.medication_outlined), label: const Text('Add Dawai'),
                   ),
                 ])

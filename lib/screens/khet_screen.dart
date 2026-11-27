@@ -918,7 +918,11 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   Map<String, dynamic>? get _currentCrop {
     if (_plotId == null) return null;
     final crops = _storage.records('khet')
-        .where((row) => row['type'] == 'FASAL' && row['plotId'] == _plotId)
+        .where((row) =>
+            row['type'] == 'FASAL' &&
+            row['plotId'] == _plotId &&
+            row['season'] == _season &&
+            row['year'] == _year)
         .toList();
     crops.sort((a, b) =>
       (DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(0))
@@ -1002,7 +1006,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
 
   String _currentCropName() {
     final crop = _currentCrop;
-    if (crop == null) return 'Is kille ke liye fasal ki entry nahi mili';
+    if (crop == null) return 'Is kille mein $_season $_year ki fasal ki entry nahi mili';
     final cropName = (crop['cropName'] ?? crop['title'] ?? 'Fasal').toString();
     final season = (crop['season'] ?? '').toString();
     final year = crop['year']?.toString() ?? '';
