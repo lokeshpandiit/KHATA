@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../services/storage_backup_service.dart';
 import '../services/khata_sharing_service.dart';
@@ -169,8 +168,14 @@ class _DocumentsScreenState extends State<DocumentsScreen>
             : ListView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
                 children: _products.map((product) {
-                  final bill = product['billPhoto'] as String?;
-                  final warranty = product['warrantyPhoto'] as String?;
+                  final bills = <String>[
+                    ...(product['billPhotos'] as List? ?? const []).whereType<String>(),
+                    if (product['billPhoto'] is String) product['billPhoto'] as String,
+                  ].toSet().toList();
+                  final warranties = <String>[
+                    ...(product['warrantyPhotos'] as List? ?? const []).whereType<String>(),
+                    if (product['warrantyPhoto'] is String) product['warrantyPhoto'] as String,
+                  ].toSet().toList();
                   return Card(
                     margin: const EdgeInsets.only(bottom: 10),
                     child: Padding(
@@ -199,10 +204,8 @@ class _DocumentsScreenState extends State<DocumentsScreen>
                           Wrap(
                             spacing: 12,
                             children: [
-                              if (bill != null)
-                                _productPhoto('Bill', bill),
-                              if (warranty != null)
-                                _productPhoto('Warranty', warranty),
+                              ...bills.map((path) => _productPhoto('Bill', path)),
+                              ...warranties.map((path) => _productPhoto('Warranty', path)),
                             ],
                           ),
                           if (product['date'] is String)
