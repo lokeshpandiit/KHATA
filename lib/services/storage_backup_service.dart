@@ -34,6 +34,7 @@ class StorageBackupService {
   Directory? _root;
   final Map<String, List<Map<String, dynamic>>> _data = {};
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
+  Future<void> _saveTail = Future<void>.value();
 
   Directory get root => _root ?? Directory(defaultFolder);
   String get folderPath => root.path;
@@ -75,6 +76,7 @@ class StorageBackupService {
     for (final category in categories) {
       _data.putIfAbsent(category, () => []);
     }
+    _removeDuplicateIds();
     _seedDefaultPlots();
     _ensurePlotOwnership();
     await _save();
@@ -140,7 +142,11 @@ class StorageBackupService {
     if (!categories.contains(category)) {
       throw ArgumentError.value(category, 'category', 'Unknown data collection');
     }
-    _data.putIfAbsent(category, () => []).insert(0, record);
+    final rows = _data.putIfAbsent(category, () => []);
+    final id = record['id']?.toString().trim() ?? '';
+    // A repeated submit/retry with the same generated ID must be idempotent.
+    if (id.isNotEmpty && rows.any((item) => item['id']?.toString() == id)) return;
+    rows.insert(0, record);
     await _save();
   }
 
@@ -275,11 +281,28 @@ class StorageBackupService {
     }
   }
 
-  Future<void> _save() async {
+  Future<void> _save() {
+    // Serialize file writes so rapid consecutive entries cannot overwrite a newer snapshot.
+    final snapshot = jsonEncode(_data);
     final file = File(p.join(root.path, _databaseName));
-    await file.parent.create(recursive: true);
-    await file.writeAsString(jsonEncode(_data), flush: true);
-    revision.value++;
+    final operation = _saveTail.then((_) async {
+      await file.parent.create(recursive: true);
+      await file.writeAsString(snapshot, flush: true);
+      revision.value++;
+    });
+    _saveTail = operation.catchError((_) {});
+    return operation;
+  }
+
+  void _removeDuplicateIds() {
+    for (final category in categories) {
+      final seen = <String>{};
+      final rows = _data[category] ?? <Map<String, dynamic>>[];
+      _data[category] = rows.where((row) {
+        final id = row['id']?.toString().trim() ?? '';
+        return id.isEmpty || seen.add(id);
+      }).toList();
+    }
   }
 
   Future<void> _requireStoragePermission() async {
@@ -343,6 +366,7 @@ class StorageBackupService {
     for (final category in categories) {
       _data.putIfAbsent(category, () => []);
     }
+    _removeDuplicateIds();
     _seedDefaultPlots();
     _ensurePlotOwnership();
     revision.value++;
