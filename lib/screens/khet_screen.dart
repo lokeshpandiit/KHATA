@@ -491,7 +491,7 @@ class _KhetScreenState extends State<KhetScreen> {
       'TRACTOR' || 'PENDING' => 'Add Tractor',
       'KUA' => 'Add Kua Hisab',
       'OTHER' => 'Add Other',
-      _ => 'Add Khet',
+      _ => 'Add',
     };
     return Scaffold(
       body: Column(
