@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
@@ -30,6 +31,7 @@ class StorageBackupService {
 
   Directory? _root;
   final Map<String, List<Map<String, dynamic>>> _data = {};
+  final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
   Directory get root => _root ?? Directory(defaultFolder);
   String get folderPath => root.path;
@@ -220,6 +222,7 @@ class StorageBackupService {
     final file = File(p.join(root.path, _databaseName));
     await file.parent.create(recursive: true);
     await file.writeAsString(jsonEncode(_data), flush: true);
+    revision.value++;
   }
 
   Future<void> _requireStoragePermission() async {
