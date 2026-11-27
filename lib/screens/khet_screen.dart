@@ -59,14 +59,20 @@ class _KhetScreenState extends State<KhetScreen> {
       final date = DateTime.tryParse(row['date'] as String? ?? '');
       final category = row['type'] as String? ?? '';
       final isPending = category == 'TRACTOR' && _balance(row) > 0;
+      final isPersonWaterLedger = category == 'PANI' && row['ledgerMode'] == 'PERSON';
       final typeMatch = _tab == 'ALL' ||
-          (_tab == 'PENDING' ? isPending : category == _tab);
+          (_tab == 'PENDING'
+              ? isPending
+              : _tab == 'KUA'
+                  ? category == 'KUA' || isPersonWaterLedger
+                  : category == _tab);
       final monthMatch = _month == 'All months' ||
           (date != null && monthKey(date) == _month);
       final seasonMatch = _seasonFilter == 'All seasons' || row['season'] == _seasonFilter;
-      final yearMatch = _yearFilter == null || row['year'] == _yearFilter;
+      final yearMatch = _yearFilter == null ||
+          (date != null ? date.year == _yearFilter : row['year'] == _yearFilter);
       final searchable =
-          '${row['title'] ?? ''} ${row['note'] ?? ''} ${row['contact'] ?? ''} ${row['source'] ?? ''} ${row['customerName'] ?? ''} ${row['farmName'] ?? ''} ${row['work'] ?? ''} ${row['cropName'] ?? ''} ${row['seedName'] ?? ''} ${row['purpose'] ?? ''}'
+          '${row['title'] ?? ''} ${row['note'] ?? ''} ${row['contact'] ?? ''} ${row['source'] ?? ''} ${row['wellType'] ?? ''} ${row['customerName'] ?? ''} ${row['farmName'] ?? ''} ${row['work'] ?? ''} ${row['cropName'] ?? ''} ${row['seedName'] ?? ''} ${row['purpose'] ?? ''}'
               .toLowerCase();
       return typeMatch && monthMatch && seasonMatch && yearMatch && searchable.contains(query);
     }).toList()
@@ -149,6 +155,105 @@ class _KhetScreenState extends State<KhetScreen> {
     }
   }
 
+  bool _isPersonWaterLedger(Map<String, dynamic> row) =>
+      row['type'] == 'PANI' && row['ledgerMode'] == 'PERSON';
+
+  List<Map<String, dynamic>> _personWaterRows(dynamic contactId) => _entries
+      .where((row) => _isPersonWaterLedger(row) && row['contactId'] == contactId)
+      .toList();
+
+  int _personWaterTotal(List<Map<String, dynamic>> rows, String direction) =>
+      rows.where((row) => row['direction'] == direction).fold<int>(
+        0,
+        (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0),
+      );
+
+  int _personWaterTotalByWell(
+    List<Map<String, dynamic>> rows,
+    String direction,
+    String wellType,
+  ) =>
+      rows.where((row) =>
+          row['direction'] == direction && row['wellType'] == wellType).fold<int>(
+        0,
+        (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0),
+      );
+
+  Widget _personWaterNetCards() {
+    final cards = <Widget>[];
+    for (final contact in _contacts) {
+      final rows = _personWaterRows(contact['id']);
+      if (rows.isEmpty) continue;
+      final given = _personWaterTotal(rows, 'Diya');
+      final taken = _personWaterTotal(rows, 'Liya');
+      final solarNet = _personWaterTotalByWell(rows, 'Diya', 'Solar') -
+          _personWaterTotalByWell(rows, 'Liya', 'Solar');
+      final dieselNet = _personWaterTotalByWell(rows, 'Diya', 'Diesel') -
+          _personWaterTotalByWell(rows, 'Liya', 'Diesel');
+      final net = solarNet + dieselNet;
+      cards.add(SizedBox(
+        width: 258,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(child: Text(
+                    (contact['name'] ?? 'व्यक्ति').toString(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  )),
+                  IconButton(
+                    tooltip: 'व्यक्ति का नेट हिसाब शेयर करें',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _shareNet(contact),
+                    icon: const Icon(Icons.share_outlined, size: 19),
+                  ),
+                ]),
+                Text('दिया: +${formatMinutes(given)}   लिया: −${formatMinutes(taken)}',
+                    style: const TextStyle(fontSize: 12)),
+                const SizedBox(height: 4),
+                Text(
+                  '☀️ सोलर: ${formatSignedMinutes(solarNet)}   ⛽ डीजल: ${formatSignedMinutes(dieselNet)}',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'NET: ${formatSignedMinutes(net)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    color: net > 0 ? Colors.green : net < 0 ? Colors.red : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ));
+    }
+    if (cards.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text('व्यक्ति के पानी का हिसाब यहाँ दिखाई देगा।',
+              style: TextStyle(color: Colors.black54, fontSize: 12)),
+        ),
+      );
+    }
+    return SizedBox(
+      height: 126,
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        scrollDirection: Axis.horizontal,
+        children: cards,
+      ),
+    );
+  }
+
   Future<void> _sharePani(Map<String, dynamic> row) async {
     final date = DateTime.tryParse(row['date'] as String? ?? '');
     final contact = _contacts.where((item) => item['id'] == row['contactId']).toList();
@@ -204,7 +309,7 @@ class _KhetScreenState extends State<KhetScreen> {
       phone: phone,
       text: [
         customized,
-        'Source: ${row['source']}',
+        if (row['wellType'] != null) 'Kua: ${row['wellType']}' else 'Source: ${row['source']}',
         if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty) 'Killa: ${_plotLabel(row['plotId'])}',
         if (row['wetKyaris'] != null) 'Kyari: ${row['wetKyaris']} bheegi, ${row['remainingKyaris']} baaki',
         if (row['season'] != null || row['year'] != null) 'Season: ${row['season'] ?? ''} ${row['year'] ?? ''}',
@@ -261,24 +366,27 @@ class _KhetScreenState extends State<KhetScreen> {
   }
 
   Future<void> _shareNet(Map<String, dynamic> contact) async {
-    final contactId = contact['id'];
-    final matching = _entries.where(
-      (row) => row['type'] == 'PANI' && row['contactId'] == contactId,
-    );
-    final balances = {'Tubewell': 0, 'Nahar': 0};
-    for (final row in matching) {
-      final source = row['source'] as String? ?? 'Tubewell';
+    final rows = _personWaterRows(contact['id']);
+    final balances = <String, int>{'Solar': 0, 'Diesel': 0};
+    for (final row in rows) {
+      final well = (row['wellType'] ?? 'Solar').toString();
       final minutes = (row['minutes'] as num?)?.toInt() ?? 0;
-      final delta = row['direction'] == 'Diya' ? minutes : -minutes;
-      balances[source] = (balances[source] ?? 0) + delta;
+      final delta = row['direction'] == 'Diya'
+          ? minutes
+          : row['direction'] == 'Liya'
+              ? -minutes
+              : 0;
+      balances[well] = (balances[well] ?? 0) + delta;
     }
+    final totalNet = balances.values.fold<int>(0, (sum, value) => sum + value);
     await KhataSharingService.share(
       phone: contact['phone'] as String?,
       text: [
         'Pani Net Hisab - ${_storage.senderName}',
-        'Tubewell: ${formatSignedMinutes(balances['Tubewell'] ?? 0)}',
-        'Nahar: ${formatSignedMinutes(balances['Nahar'] ?? 0)}',
-      ].join('\n'),
+        'Solar Kua: ${formatSignedMinutes(balances['Solar'] ?? 0)}',
+        'Diesel Kua: ${formatSignedMinutes(balances['Diesel'] ?? 0)}',
+        'TOTAL NET: ${formatSignedMinutes(totalNet)}',
+      ].join('\\n'),
     );
   }
 
@@ -452,22 +560,7 @@ class _KhetScreenState extends State<KhetScreen> {
                 ),
               ),
             ),
-          if (_tab == 'PANI' && _contacts.isNotEmpty)
-            SizedBox(
-              height: 54,
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                scrollDirection: Axis.horizontal,
-                children: _contacts.map((contact) => Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ActionChip(
-                    avatar: const Icon(Icons.account_balance_wallet_outlined),
-                    label: Text('Net: ${contact['name']}'),
-                    onPressed: () => _shareNet(contact),
-                  ),
-                )).toList(),
-              ),
-            ),
+          if (_tab == 'PANI') _personWaterNetCards(),
           Expanded(
             child: rows.isEmpty
                 ? emptyState(
@@ -521,24 +614,35 @@ class _KhetScreenState extends State<KhetScreen> {
     }
     if (row['type'] == 'PANI') {
       final date = DateTime.tryParse(row['date'] as String? ?? '');
+      final personLedger = _isPersonWaterLedger(row);
+      final minutes = (row['minutes'] as num?)?.toInt() ?? 0;
+      final wellType = (row['wellType'] ?? '').toString();
+      final directionLabel = row['direction'] == 'Diya' ? 'पानी दिया' : 'पानी लिया';
+      final dateText = date == null ? '' : dateLabel(date);
       return Card(
         margin: const EdgeInsets.only(bottom: 9),
         child: ListTile(
           leading: const CircleAvatar(child: Icon(Icons.water_drop)),
           title: Text([
             (row['contact'] ?? 'Contact').toString(),
-            (row['source'] ?? '').toString(),
-            (row['direction'] ?? '').toString(),
+            if (personLedger && wellType == 'Solar') '☀️ सोलर कुआँ'
+            else if (personLedger && wellType == 'Diesel') '⛽ डीजल कुआँ'
+            else if (!personLedger && (row['source'] ?? '').toString().isNotEmpty) row['source'].toString(),
+            if (personLedger) directionLabel else (row['direction'] ?? '').toString(),
             if (row['plotId'] != null) _plotLabel(row['plotId']),
           ].where((part) => part.isNotEmpty).join(' · ')),
           subtitle: Text(
-            '${formatMinutes((row['minutes'] as num?)?.toInt() ?? 0)}'
-            '${row['wetKyaris'] == null ? '' : '\nBheegi: ${row['wetKyaris']} / ${row['totalKyarisSnapshot'] ?? '-'} · Baaki: ${row['remainingKyaris'] ?? '-'}'}'
-            '${row['season'] == null ? '' : '\n${row['season']} ${row['year'] ?? ''}'}'
-            '${(row['note'] as String? ?? '').isNotEmpty ? '\n${row['note']}' : ''}'
-            '${date == null ? '' : '\n${timeLabel(date)}'}',
+            personLedger
+                ? '${row['direction'] == 'Diya' ? '+' : '−'}${formatMinutes(minutes)}'
+                    '${dateText.isEmpty ? '' : '\\n$dateText'}'
+                    '${(row['note'] as String? ?? '').isNotEmpty ? '\\n${row['note']}' : ''}'
+                : '${formatMinutes(minutes)}'
+                    '${row['wetKyaris'] == null ? '' : '\\nBheegi: ${row['wetKyaris']} / ${row['totalKyarisSnapshot'] ?? '-'} · Baaki: ${row['remainingKyaris'] ?? '-'}'}'
+                    '${row['season'] == null ? '' : '\\n${row['season']} ${row['year'] ?? ''}'}'
+                    '${(row['note'] as String? ?? '').isNotEmpty ? '\\n${row['note']}' : ''}'
+                    '${date == null ? '' : '\\n${timeLabel(date)}'}',
           ),
-          isThreeLine: (row['note'] as String? ?? '').isNotEmpty,
+          isThreeLine: true,
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -716,6 +820,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   String? _contactId;
   String? _plotId;
   String _source = 'Tubewell';
+  String _wellType = 'Solar';
   bool _borrowedWater = false;
   String _direction = 'Diya';
   String _season = 'Rabi';
@@ -807,61 +912,92 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
     final plotMode = widget.initialPlotId != null;
     final ownMinutes = int.tryParse(_ownMinutes.text.trim()) ?? 0;
     final borrowedMinutes = int.tryParse(_borrowedMinutes.text.trim()) ?? 0;
-    final minutes = plotMode ? ownMinutes + (_borrowedWater ? borrowedMinutes : 0) : (int.tryParse(_minutes.text.trim()) ?? 0);
-    if (!plotMode && minutes <= 0) {
-      _error('Enter a valid number of minutes');
+    final minutes = plotMode
+        ? ownMinutes + (_borrowedWater ? borrowedMinutes : 0)
+        : (int.tryParse(_minutes.text.trim()) ?? 0);
+
+    if (minutes <= 0) {
+      _error('पानी के सही मिनट भरें');
       return;
     }
     if (!plotMode && _contactId == null) {
-      _error('Pick a phone contact before saving Pani hisab');
+      _error('पहले व्यक्ति का संपर्क चुनें');
       return;
     }
-    if (_plotId == null || _selectedPlot == null) {
-      _error('Select your killa for this water entry');
-      return;
-    }
-    if (_totalKyaris <= 0) {
-      _error('Map Edit mein pehle is kille ki total kyari set karein');
-      return;
-    }
-    if (_wetCount <= 0 || _wetCount > _totalKyaris) {
-      _error('Bheegi kyari 1 se ' + _totalKyaris.toString() + ' ke beech honi chahiye');
-      return;
+    if (plotMode) {
+      if (_plotId == null || _selectedPlot == null) {
+        _error('Select your killa for this water entry');
+        return;
+      }
+      if (_totalKyaris <= 0) {
+        _error('Map Edit mein pehle is kille ki total kyari set karein');
+        return;
+      }
+      if (_wetCount <= 0 || _wetCount > _totalKyaris) {
+        _error('Bheegi kyari 1 se ' + _totalKyaris.toString() + ' ke beech honi chahiye');
+        return;
+      }
+      if (_borrowedWater && borrowedMinutes <= 0) {
+        _error('Extra pani ke minutes enter karein');
+        return;
+      }
+      if (_borrowedWater && _contactId == null) {
+        _error('Pani kis se liya, contact select karein');
+        return;
+      }
     }
 
-    if (plotMode && _borrowedWater && borrowedMinutes <= 0) { _error('Extra pani ke minutes enter karein'); return; }
-    if (plotMode && _borrowedWater && _contactId == null) { _error('Pani kis se liya, contact select karein'); return; }
     setState(() => _saving = true);
     try {
       final now = DateTime.now();
-      final contact = _contactId == null ? null : _contacts.firstWhere((item) => item['id'] == _contactId);
+      final contact = _contactId == null
+          ? null
+          : _contacts.firstWhere((item) => item['id'] == _contactId);
       final entryDate = DateTime(
-        _activityDate.year, _activityDate.month, _activityDate.day,
-        now.hour, now.minute,
+        _activityDate.year,
+        _activityDate.month,
+        _activityDate.day,
+        now.hour,
+        now.minute,
       );
-      await _storage.addRecord('khet', {
+
+      final record = <String, dynamic>{
         'id': now.microsecondsSinceEpoch.toString(),
         'type': 'PANI',
         'contactId': _contactId,
-        'plotId': _plotId,
         'contact': contact?['name'],
         'contactPhone': contact?['phone'],
-        'source': _source,
-        'direction': plotMode ? (_borrowedWater ? 'Apni baari + Liya' : 'Apni baari') : _direction,
+        'direction': plotMode
+            ? (_borrowedWater ? 'Apni baari + Liya' : 'Apni baari')
+            : _direction,
         'minutes': minutes,
-        'ownMinutes': plotMode ? ownMinutes : null,
-        'borrowedMinutes': plotMode && _borrowedWater ? borrowedMinutes : 0,
-        'borrowedWater': plotMode && _borrowedWater,
-        'borrowedContact': (plotMode && _borrowedWater && contact != null) ? contact['name'] : null,
-        'borrowedContactId': (plotMode && _borrowedWater) ? _contactId : null,
-        'wetKyaris': _wetCount,
-        'totalKyarisSnapshot': _totalKyaris,
-        'remainingKyaris': _remainingKyaris,
-        'season': _season,
-        'year': _year,
         'note': _note.text.trim(),
         'date': entryDate.toIso8601String(),
-      });
+      };
+
+      if (plotMode) {
+        record.addAll({
+          'plotId': _plotId,
+          'source': _source,
+          'ownMinutes': ownMinutes,
+          'borrowedMinutes': _borrowedWater ? borrowedMinutes : 0,
+          'borrowedWater': _borrowedWater,
+          'borrowedContact': (_borrowedWater && contact != null) ? contact['name'] : null,
+          'borrowedContactId': _borrowedWater ? _contactId : null,
+          'wetKyaris': _wetCount,
+          'totalKyarisSnapshot': _totalKyaris,
+          'remainingKyaris': _remainingKyaris,
+          'season': _season,
+          'year': _year,
+        });
+      } else {
+        record.addAll({
+          'ledgerMode': 'PERSON',
+          'wellType': _wellType,
+        });
+      }
+
+      await _storage.addRecord('khet', record);
       if (mounted) Navigator.pop(context);
     } catch (error) {
       _error('Could not save Pani hisab: ' + error.toString());
@@ -898,60 +1034,60 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
             ),
           const SizedBox(height: 12),
           ],
-          KhetPlotDropdown(selectedId: _plotId, onChanged: (value) {
-            setState(() { _plotId = value; _wetKyaris.clear(); });
-          }),
-          const SizedBox(height: 8),
-          Text(
-            _selectedPlot == null
-                ? 'Killa select karein. Total kyari map ke Edit option mein set hoti hain.'
-                : 'Is kille mein total kyari: ' + _totalKyaris.toString(),
-            style: const TextStyle(color: Colors.black54, fontSize: 12),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _wetKyaris,
-            keyboardType: TextInputType.number,
-            onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              labelText: 'Is baar kitni kyari bheegi?',
-              prefixIcon: Icon(Icons.water_drop_outlined),
+          if (widget.initialPlotId != null) ...[
+            KhetPlotDropdown(selectedId: _plotId, onChanged: (value) {
+              setState(() { _plotId = value; _wetKyaris.clear(); });
+            }),
+            const SizedBox(height: 8),
+            Text(
+              _selectedPlot == null
+                  ? 'Killa select karein. Total kyari map ke Edit option mein set hoti hain.'
+                  : 'Is kille mein total kyari: ' + _totalKyaris.toString(),
+              style: const TextStyle(color: Colors.black54, fontSize: 12),
             ),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Expanded(child: Text('Bheegi: ' + _wetCount.toString(), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w700))),
-                  Expanded(child: Text('Baaki: ' + _remainingKyaris.toString(), style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w700))),
-                ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _wetKyaris,
+              keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Is baar kitni kyari bheegi?',
+                prefixIcon: Icon(Icons.water_drop_outlined),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          SeasonYearFields(
-            season: _season,
-            year: _year,
-            onSeasonChanged: (value) => setState(() => _season = value),
-            onYearChanged: (value) => setState(() => _year = value),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _pickDate,
-            icon: const Icon(Icons.calendar_month_outlined),
-            label: Text('Paani date: ' + DateFormat('dd MMM yyyy').format(_activityDate)),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _source,
-            decoration: const InputDecoration(labelText: 'Pani Source'),
-            items: ['Tubewell', 'Nahar', 'Mix'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
-            onChanged: (value) => setState(() => _source = value ?? _source),
-          ),
-          const SizedBox(height: 12),
-          if (widget.initialPlotId != null) ...[
+            const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('Bheegi: ' + _wetCount.toString(), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w700))),
+                    Expanded(child: Text('Baaki: ' + _remainingKyaris.toString(), style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w700))),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SeasonYearFields(
+              season: _season,
+              year: _year,
+              onSeasonChanged: (value) => setState(() => _season = value),
+              onYearChanged: (value) => setState(() => _year = value),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _pickDate,
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: Text('Paani date: ' + DateFormat('dd MMM yyyy').format(_activityDate)),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _source,
+              decoration: const InputDecoration(labelText: 'Pani Source'),
+              items: ['Tubewell', 'Nahar', 'Mix'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+              onChanged: (value) => setState(() => _source = value ?? _source),
+            ),
+            const SizedBox(height: 12),
             DropdownButtonFormField<bool>(
               initialValue: _borrowedWater,
               decoration: const InputDecoration(labelText: 'Pani ki baari'),
@@ -975,18 +1111,41 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
             Text('Total: ' + formatMinutes((int.tryParse(_ownMinutes.text) ?? 0) + (_borrowedWater ? (int.tryParse(_borrowedMinutes.text) ?? 0) : 0))),
           ] else ...[
             DropdownButtonFormField<String>(
+              initialValue: _wellType,
+              decoration: const InputDecoration(labelText: 'किस कुएँ से पानी दिया/लिया?'),
+              items: const [
+                DropdownMenuItem(value: 'Solar', child: Text('☀️ सोलर कुआँ')),
+                DropdownMenuItem(value: 'Diesel', child: Text('⛽ डीजल कुआँ')),
+              ],
+              onChanged: (value) => setState(() => _wellType = value ?? _wellType),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
               initialValue: _direction,
-              decoration: const InputDecoration(labelText: 'Len-Den'),
-              items: ['Diya', 'Liya'].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+              decoration: const InputDecoration(labelText: 'व्यक्ति के साथ पानी का हिसाब'),
+              items: const [
+                DropdownMenuItem(value: 'Diya', child: Text('व्यक्ति को पानी दिया (+)')),
+                DropdownMenuItem(value: 'Liya', child: Text('व्यक्ति से पानी लिया (−)')),
+              ],
               onChanged: (value) => setState(() => _direction = value ?? _direction),
             ),
             const SizedBox(height: 12),
-            TextField(controller: _minutes, keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: 'Paani kitne minute chala?', helperText: 'Duration: ' + formatMinutes(int.tryParse(_minutes.text) ?? 0)),
+            TextField(
+              controller: _minutes,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'कितने मिनट पानी दिया/लिया?',
+                helperText: 'समय: ' + formatMinutes(int.tryParse(_minutes.text) ?? 0),
+              ),
               onChanged: (_) => setState(() {}),
             ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _pickDate,
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: Text('पानी की तारीख: ' + DateFormat('dd MMM yyyy').format(_activityDate)),
+            ),
           ],
-          const SizedBox(height: 12),
           VoiceDictationField(
             controller: _note,
             label: 'Note (jaise: shaam ko uski baari ke baad)',
