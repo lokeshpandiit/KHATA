@@ -14,6 +14,7 @@ import '../widgets/plot_selector.dart';
 import '../widgets/multi_plot_selector.dart';
 import '../widgets/farm_fields.dart';
 import '../services/farm_reminder_service.dart';
+import '../services/future_date_reminder_prompt.dart';
 import '../widgets/voice_dictation_field.dart';
 
 class KhetScreen extends StatefulWidget {
@@ -909,7 +910,15 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
       firstDate: DateTime(now.year - 8),
       lastDate: DateTime(now.year + 8),
     );
-    if (picked != null && mounted) setState(() => _activityDate = picked);
+    if (picked != null && mounted) {
+      setState(() => _activityDate = picked);
+      await FutureDateReminderPrompt.check(
+        context,
+        date: picked,
+        taskTitle: 'Khet mein pani dena',
+        details: _note.text.trim(),
+      );
+    }
   }
 
   void _error(String message) {
@@ -1317,6 +1326,11 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
         _harvestDate = picked;
         _harvested = true;
       });
+      await FutureDateReminderPrompt.check(
+        context,
+        date: picked,
+        taskTitle: 'Fasal katni - ${_title.text.trim()}',
+      );
     }
   }
 
@@ -1328,7 +1342,15 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       firstDate: DateTime(now.year - 8),
       lastDate: DateTime(now.year + 8),
     );
-    if (picked != null && mounted) setState(() => _activityDate = picked);
+    if (picked != null && mounted) {
+      setState(() => _activityDate = picked);
+      await FutureDateReminderPrompt.check(
+        context,
+        date: picked,
+        taskTitle: '${_dateLabel} - ${_title.text.trim()}',
+        details: _note.text.trim(),
+      );
+    }
   }
 
   Future<void> _pickReminder() async {
@@ -2004,7 +2026,15 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
       firstDate: DateTime(now.year - 1),
       lastDate: DateTime(now.year + 10),
     );
-    if (picked != null && mounted) setState(() => _dueDate = picked);
+    if (picked != null && mounted) {
+      setState(() => _dueDate = picked);
+      await FutureDateReminderPrompt.check(
+        context,
+        date: picked,
+        taskTitle: 'Tractor payment follow-up',
+        details: 'Tractor payment due date',
+      );
+    }
   }
 
   Future<void> _save() async {
