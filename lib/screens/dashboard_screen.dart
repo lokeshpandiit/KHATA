@@ -45,6 +45,19 @@ class DashboardScreen extends StatelessWidget {
     final hisabs = storage.records('hisabs');
     final khet = storage.records('khet');
     final now = DateTime.now();
+    bool thisMonth(Map<String, dynamic> row) {
+      final date = _date(row);
+      return date != null && date.year == now.year && date.month == now.month;
+    }
+    final monthHisabAmount = hisabs.where(thisMonth).fold<double>(
+      0, (sum, row) => sum + _amount(row['amount']),
+    );
+    final monthKhetAmount = khet.where(thisMonth)
+        .where((row) => row['type'] != 'PANI' && row['type'] != 'TRACTOR')
+        .fold<double>(0, (sum, row) => sum + _amount(row['price']));
+    final monthPani = khet.where(thisMonth)
+        .where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON')
+        .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
     final pending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0).toList()
       ..sort((a, b) => (DateTime.tryParse(a['dueDate'] as String? ?? '') ?? DateTime(9999))
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '') ?? DateTime(9999)));
