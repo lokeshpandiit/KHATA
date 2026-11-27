@@ -635,7 +635,8 @@ class _KhetScreenState extends State<KhetScreen> {
                 ],
               ),
             ),
-            IconButton(tooltip: 'Share', onPressed: () => _shareKhet(row), icon: const Icon(Icons.share_outlined)),
+            if (row['type'] != 'FASAL')
+              IconButton(tooltip: 'Share', onPressed: () => _shareKhet(row), icon: const Icon(Icons.share_outlined)),
           ],
         ),
       ),
