@@ -113,7 +113,7 @@ class _KhetScreenState extends State<KhetScreen> {
       context: context,
       builder: (context) => SafeArea(
         child: Wrap(
-          children: ['DAWAI', 'FASAL', 'TRACTOR', 'OTHER']
+          children: ['DAWAI', 'KHAD', 'FASAL', 'TRACTOR', 'OTHER']
               .map((item) => ListTile(
                     leading: Icon(item == 'TRACTOR' ? Icons.agriculture : Icons.add_circle_outline),
                     title: Text(item),
@@ -488,9 +488,10 @@ class _KhetScreenState extends State<KhetScreen> {
     final months = availableMonths(_entries);
     if (!months.contains(_month)) _month = 'All months';
     final rows = _filtered;
-    const tabs = ['ALL', 'DAWAI', 'FASAL', 'TRACTOR', 'KUA', 'OTHER'];
+    const tabs = ['ALL', 'DAWAI', 'KHAD', 'FASAL', 'TRACTOR', 'KUA', 'OTHER'];
     final addLabel = switch (_tab) {
       'DAWAI' => 'Add Dawai',
+      'KHAD' => 'Add Khaad',
       'FASAL' => 'Add Fasal',
       'HARA_BEEJ' => 'Add Hara Beej',
       'PANI' => 'Add Pani',
@@ -1085,6 +1086,20 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
             const SizedBox(height: 8),
             const Text('Har kille mein Full Killa ya Partial kyari alag select karein. Pani ke total minutes kyari ke anupat mein bantenge.',
                 style: TextStyle(color: Colors.black54, fontSize: 12)),
+            if (widget.type == 'KHAD') ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _fertilizerKind,
+                decoration: const InputDecoration(labelText: 'Khaad ka type'),
+                items: const [
+                  DropdownMenuItem(value: 'DAP', child: Text('DAP')),
+                  DropdownMenuItem(value: 'Urea', child: Text('Urea')),
+                  DropdownMenuItem(value: 'Potash', child: Text('Potash')),
+                  DropdownMenuItem(value: 'Other fertilizer', child: Text('Other khaad')),
+                ],
+                onChanged: (value) => setState(() => _fertilizerKind = value ?? _fertilizerKind),
+              ),
+            ],
             const SizedBox(height: 12),
             SeasonYearFields(
               season: _season,
@@ -1225,6 +1240,9 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   String _season = 'Rabi';
   int _year = DateTime.now().year;
   String _purpose = 'Herbicide (ghas khatam karne wali)';
+  String _fertilizerKind = 'DAP';
+  bool _khalaOnly = false;
+  final _areaController = TextEditingController();
   DateTime _activityDate = DateTime.now();
   bool _reminderEnabled = false;
   DateTime? _reminderAt;
@@ -1244,7 +1262,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     }
   }
 
-  bool get _needsFarmDetails => ['FASAL', 'HARA_BEEJ', 'DAWAI'].contains(widget.type);
+  bool get _needsFarmDetails => ['FASAL', 'HARA_BEEJ', 'DAWAI', 'KHAD'].contains(widget.type) && !(widget.type == 'DAWAI' && _khalaOnly);
   String get _dateLabel => widget.type == 'FASAL' || widget.type == 'HARA_BEEJ'
       ? 'Beejne ki date' : 'Dawai dalne ki date';
 
@@ -1287,6 +1305,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     _price.dispose();
     _note.dispose();
     _kyariNumber.dispose();
+    _areaController.dispose();
     super.dispose();
   }
 
@@ -1388,11 +1407,11 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       _error('Partial killa ke liye kyari number/name likhein');
       return;
     }
-    if (widget.type == 'DAWAI' && _reminderEnabled && _reminderAt == null) {
+    if (widget.type == 'DAWAI' && !_khalaOnly && _reminderEnabled && _reminderAt == null) {
       _error('Reminder ke liye date aur time set karein');
       return;
     }
-    if (widget.type == 'DAWAI' && _reminderEnabled && !_reminderAt!.isAfter(DateTime.now())) {
+    if (widget.type == 'DAWAI' && !_khalaOnly && _reminderEnabled && !_reminderAt!.isAfter(DateTime.now())) {
       _error('Reminder future date/time par set karein');
       return;
     }
@@ -1452,6 +1471,12 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
             'fullKilla': kyariCount == totalKyaris,
           });
         }
+        if (widget.type == 'KHAD') {
+          record['purpose'] = _fertilizerKind;
+          record['fertilizerType'] = _fertilizerKind;
+          record['cropAtUse'] = currentCrop == null ? 'Fasal record nahi hai' : (currentCrop['cropName'] ?? currentCrop['title'] ?? 'Fasal').toString();
+          record['applicationDate'] = activityDate.toIso8601String();
+        }
         if (widget.type == 'FASAL') {
           record['cropName'] = title;
           record['sowingDate'] = activityDate.toIso8601String();
@@ -1463,6 +1488,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
         }
         if (widget.type == 'DAWAI') {
           record['purpose'] = _purpose;
+          record['applicationArea'] = _khalaOnly ? (_areaController.text.trim().isEmpty ? 'Khala / kacha nala' : _areaController.text.trim()) : 'Khet';
           record['cropAtUse'] = currentCrop == null
               ? 'Fasal record nahi hai'
               : (currentCrop['cropName'] ?? currentCrop['title'] ?? 'Fasal').toString();
@@ -1473,7 +1499,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
         await _storage.addRecord('khet', record);
       }
 
-      if (widget.type == 'DAWAI' && _reminderEnabled && _reminderAt != null) {
+      if (widget.type == 'DAWAI' && !_khalaOnly && _reminderEnabled && _reminderAt != null) {
         try {
           final killaNames = plotEntries.map((entry) {
             final plot = _storage.records('plots').firstWhere((p) => p['id'] == entry.key);
@@ -1536,7 +1562,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     final farmPlot = _needsFarmDetails;
     final titleLabel = widget.type == 'FASAL' ? 'Fasal ka naam'
       : widget.type == 'HARA_BEEJ' ? 'Hara beej / chara ka naam'
-      : widget.type == 'DAWAI' ? 'Dawai ka naam' : 'Title / Name';
+      : widget.type == 'DAWAI' ? 'Dawai ka naam' : widget.type == 'KHAD' ? 'Khaad ka naam' : 'Title / Name';
     return Scaffold(
       appBar: AppBar(title: Text('Add ' + widget.type.replaceAll('_', ' '))),
       body: ListView(
@@ -1556,8 +1582,18 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
                 _plotId = value.isEmpty ? null : value.keys.first;
               }),
             )
-          else
+          else if (!(widget.type == 'DAWAI' && _khalaOnly))
             KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+          if (widget.type == 'DAWAI') ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Khala / kachhe nale par spray'),
+              subtitle: const Text('Is entry ko kisi kille se link na karein'),
+              value: _khalaOnly,
+              onChanged: (value) => setState(() { _khalaOnly = value; if (value) _selectedPlots.clear(); }),
+            ),
+            if (_khalaOnly) TextField(controller: _areaController, decoration: const InputDecoration(labelText: 'Jagah (optional)', hintText: 'Khala / kacha nala')),
+          ],
           if (farmPlot) ...[
             const SizedBox(height: 8),
             if (widget.type == 'DAWAI')
@@ -1617,10 +1653,10 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
             controller: _price,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
-              labelText: widget.type == 'DAWAI' ? 'Dawai ka kharcha (₹)' : 'Price / kharcha (₹)',
+              labelText: widget.type == 'DAWAI' ? 'Dawai ka kharcha (₹)' : widget.type == 'KHAD' ? 'Khaad ka kharcha (₹)' : 'Price / kharcha (₹)',
             ),
           ),
-          if (widget.type == 'DAWAI') ...[
+          if (widget.type == 'DAWAI' && !_khalaOnly) ...[
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
