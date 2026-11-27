@@ -9,6 +9,7 @@ import '../services/contact_picker_service.dart';
 import '../services/khata_sharing_service.dart';
 import '../services/storage_backup_service.dart';
 import '../widgets/khata_widgets.dart';
+import '../widgets/plot_selector.dart';
 
 class KhetScreen extends StatefulWidget {
   const KhetScreen({super.key});
@@ -31,6 +32,8 @@ class _KhetScreenState extends State<KhetScreen> {
 
   List<Map<String, dynamic>> get _entries => _storage.records('khet');
   List<Map<String, dynamic>> get _contacts => _storage.records('contacts');
+
+  String _plotLabel(dynamic id) => plotLabelForId(_storage, id);
 
   double _amount(dynamic value) {
     if (value is num) return value.toDouble();
@@ -183,6 +186,7 @@ class _KhetScreenState extends State<KhetScreen> {
         'Pani Hisab - ${_storage.senderName}',
         'Source: ${row['source']}',
         'Kaam: ${row['direction']} / ${formatMinutes((row['minutes'] as num?)?.toInt() ?? 0)}',
+        if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty) 'Killa: ${_plotLabel(row['plotId'])}',
         if (date != null) 'Date: ${dateLabel(date)}',
         if (includeNote && note.isNotEmpty) 'Note: $note',
       ].join('\n'),
@@ -197,6 +201,7 @@ class _KhetScreenState extends State<KhetScreen> {
       text: [
         'Khet Hisab - ${_storage.senderName}',
         'Type: ${row['type']}',
+        if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty) 'Killa: ${_plotLabel(row['plotId'])}',
         if ((row['title'] as String? ?? '').isNotEmpty) 'Name: ${row['title']}',
         if ((row['price'] as String? ?? '').isNotEmpty) 'Price: ₹${row['price']}',
         if ((row['note'] as String? ?? '').isNotEmpty) 'Note: ${row['note']}',
@@ -223,6 +228,7 @@ class _KhetScreenState extends State<KhetScreen> {
         'TRACTOR WORK BILL - ${_storage.senderName}',
         'Customer: ${row['customerName'] ?? ''}',
         'Field: ${row['farmName'] ?? ''}',
+        if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty) 'Killa: ${_plotLabel(row['plotId'])}',
         'Work: ${row['work'] ?? ''}',
         'Total: ₹${row['totalAmount'] ?? 0}',
         'Paid: ₹${row['paidAmount'] ?? 0}',
@@ -418,7 +424,12 @@ class _KhetScreenState extends State<KhetScreen> {
         margin: const EdgeInsets.only(bottom: 9),
         child: ListTile(
           leading: const CircleAvatar(child: Icon(Icons.water_drop)),
-          title: Text('${row['contact'] ?? 'Contact'} · ${row['source']} · ${row['direction']}'),
+          title: Text([
+            (row['contact'] ?? 'Contact').toString(),
+            (row['source'] ?? '').toString(),
+            (row['direction'] ?? '').toString(),
+            if (row['plotId'] != null) _plotLabel(row['plotId']),
+          ].where((part) => part.isNotEmpty).join(' · ')),
           subtitle: Text(
             '${formatMinutes((row['minutes'] as num?)?.toInt() ?? 0)}'
             '${(row['note'] as String? ?? '').isNotEmpty ? '\n${row['note']}' : ''}'
@@ -452,6 +463,8 @@ class _KhetScreenState extends State<KhetScreen> {
             ]),
             const SizedBox(height: 6),
             Text('Field: ${row['farmName'] ?? '-'}'),
+            if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty)
+              Text('Killa: ${_plotLabel(row['plotId'])}'),
             Text('Work: ${row['work'] ?? '-'}'),
             const SizedBox(height: 8),
             Wrap(spacing: 12, runSpacing: 6, children: [
@@ -510,6 +523,8 @@ class _KhetScreenState extends State<KhetScreen> {
                 children: [
                   Text(row['title'] as String? ?? row['type'] as String,
                       style: const TextStyle(fontWeight: FontWeight.w700)),
+                  if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty)
+                    Text(_plotLabel(row['plotId']), style: const TextStyle(color: Colors.black54, fontSize: 12)),
                   if ((row['price'] as String? ?? '').isNotEmpty) Text('₹${row['price']}'),
                   if ((row['note'] as String? ?? '').isNotEmpty) Text(row['note'] as String),
                   if (date != null)
@@ -572,6 +587,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   String? _contactId;
   String _source = 'Tubewell';
   String _direction = 'Diya';
+  String? _plotId;
   bool _saving = false;
 
   List<Map<String, dynamic>> get _contacts => _storage.records('contacts');
@@ -634,6 +650,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         'id': now.microsecondsSinceEpoch.toString(),
         'type': 'PANI',
         'contactId': _contactId,
+        'plotId': _plotId,
         'contact': contact['name'],
         'contactPhone': contact['phone'],
         'source': _source,
@@ -675,6 +692,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
               )).toList(),
               onChanged: (value) => setState(() => _contactId = value),
             ),
+          const SizedBox(height: 12),
+          KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _source,
@@ -729,6 +748,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   final _note = TextEditingController();
   final List<String> _itemPhotos = [];
   final List<String> _billPhotos = [];
+  String? _plotId;
   bool _saving = false;
 
   @override
@@ -782,6 +802,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       await _storage.addRecord('khet', {
         'id': now.microsecondsSinceEpoch.toString(),
         'type': widget.type,
+        'plotId': _plotId,
         'title': _title.text.trim(),
         'price': _price.text.trim(),
         'note': _note.text.trim(),
@@ -835,6 +856,8 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       children: [
         TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title / Name')),
         const SizedBox(height: 12),
+        KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+        const SizedBox(height: 12),
         TextField(controller: _price, keyboardType: const TextInputType.numberWithOptions(decimal: true),
           decoration: const InputDecoration(labelText: 'Price (₹)')),
         const SizedBox(height: 12),
@@ -869,6 +892,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
   final _photos = <String>[];
   String? _customerName;
   String? _customerPhone;
+  String? _plotId;
   DateTime? _dueDate;
   bool _saving = false;
 
@@ -945,6 +969,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
         'type': 'TRACTOR',
         'customerName': _customerName,
         'customerPhone': _customerPhone,
+        'plotId': _plotId,
         'contact': _customerName,
         'farmName': _farm.text.trim(),
         'work': _work.text.trim(),
@@ -985,6 +1010,8 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
         const SizedBox(height: 12),
         TextField(controller: _farm, textCapitalization: TextCapitalization.words,
           decoration: const InputDecoration(labelText: 'Which field / khet?')),
+        const SizedBox(height: 12),
+        KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
         const SizedBox(height: 12),
         TextField(controller: _work, textCapitalization: TextCapitalization.sentences,
           decoration: const InputDecoration(labelText: 'Work done (ploughing, rotavator, sowing...)')),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../services/storage_backup_service.dart';
+import '../widgets/khet_map_widget.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -89,7 +90,9 @@ class DashboardScreen extends StatelessWidget {
         Text('Namaste, ${storage.senderName} 👋', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
         const SizedBox(height: 4),
         Text(DateFormat('EEEE, dd MMMM yyyy').format(now), style: const TextStyle(color: Colors.black54)),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
+        const KhetMapWidget(),
+        const SizedBox(height: 18),
         Row(children: [
           Expanded(child: _MetricCard(title: 'Today records', value: todayCount.toString(), icon: Icons.today, tint: const Color(0xFFE5F2EC))),
           const SizedBox(width: 10),

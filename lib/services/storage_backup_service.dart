@@ -27,6 +27,7 @@ class StorageBackupService {
     'contacts',
     'members',
     'products',
+    'plots',
   ];
 
   Directory? _root;
@@ -73,7 +74,30 @@ class StorageBackupService {
     for (final category in categories) {
       _data.putIfAbsent(category, () => []);
     }
+    _seedDefaultPlots();
     await _save();
+  }
+
+  void _seedDefaultPlots() {
+    final plots = _data.putIfAbsent('plots', () => []);
+    if (plots.isNotEmpty) return;
+    const initialNumbers = <String, String>{
+      '0-1': 'J', '0-2': 'S',
+      '1-1': '3', '1-2': '5',
+      '2-1': '2', '2-2': '4',
+      '3-1': '1', '3-2': 'C',
+    };
+    for (var row = 0; row < 4; row++) {
+      for (var column = 0; column < 4; column++) {
+        plots.add({
+          'id': 'plot-$row-$column',
+          'row': row,
+          'column': column,
+          'number': initialNumbers['$row-$column'] ?? '',
+          'name': '',
+        });
+      }
+    }
   }
 
   Future<void> _ensureFolders() async {
@@ -289,6 +313,11 @@ class StorageBackupService {
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
     }
+    for (final category in categories) {
+      _data.putIfAbsent(category, () => []);
+    }
+    _seedDefaultPlots();
+    revision.value++;
   }
 
   Future<void> backupToDrive() async {
