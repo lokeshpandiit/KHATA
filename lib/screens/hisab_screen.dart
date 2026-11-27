@@ -400,18 +400,16 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
           ],
           TextField(controller: _amount, keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(labelText: 'Amount (₹, optional)')),
-          if (showPerson) ...[
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              initialValue: _direction,
-              decoration: const InputDecoration(labelText: 'Money direction'),
-              items: const [
-                DropdownMenuItem(value: 'RECEIVED', child: Text('Paise mile (+)')),
-                DropdownMenuItem(value: 'PAID', child: Text('Paise diye (−)')),
-              ],
-              onChanged: (value) => setState(() => _direction = value ?? _direction),
-            ),
-          ],
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            initialValue: _direction,
+            decoration: const InputDecoration(labelText: 'Money direction'),
+            items: const [
+              DropdownMenuItem(value: 'RECEIVED', child: Text('Paise mile (+) · Green')),
+              DropdownMenuItem(value: 'PAID', child: Text('Paise diye (−) · Red')),
+            ],
+            onChanged: (value) => setState(() => _direction = value ?? _direction),
+          ),
           const SizedBox(height: 12),
           TextField(controller: _note, minLines: 3, maxLines: 5,
             decoration: const InputDecoration(labelText: 'Text note (optional)')),
