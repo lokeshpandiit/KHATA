@@ -109,13 +109,6 @@ class DashboardScreen extends StatelessWidget {
 
 }
 
-class _RecentItem {
-  const _RecentItem({required this.type, required this.title, required this.date, required this.amount, required this.direction, required this.details});
-  final String type, title, direction, details;
-  final DateTime? date;
-  final double amount;
-}
-
 class _MetricCard extends StatelessWidget {
   const _MetricCard({required this.title, required this.value, required this.icon, required this.tint});
   final String title, value;
@@ -133,18 +126,6 @@ class _MetricCard extends StatelessWidget {
     ]),
   ));
 }
-
-class _SummaryLine extends StatelessWidget {
-  const _SummaryLine({required this.label, required this.value, this.bold = false});
-  final String label, value;
-  final bool bold;
-  @override
-  Widget build(BuildContext context) => Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-    Text(label, style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.normal)),
-    Text(value, style: TextStyle(fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
-  ]);
-}
-
 
 class _MonthPersonLedgerScreen extends StatelessWidget {
   const _MonthPersonLedgerScreen({required this.rows});
