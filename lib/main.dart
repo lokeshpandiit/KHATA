@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'screens/documents_screen.dart';
 import 'screens/hisab_screen.dart';
@@ -178,6 +179,90 @@ class _KhataHomeState extends State<KhataHome> {
     senderController.dispose();
   }
 
+  Future<void> _showFarmSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final day = prefs.getInt('farm_water_turn_day') ?? -1;
+    final startHour = prefs.getInt('farm_water_turn_start_hour') ?? 6;
+    final startMinute = prefs.getInt('farm_water_turn_start_minute') ?? 0;
+    final endHour = prefs.getInt('farm_water_turn_end_hour') ?? 10;
+    final endMinute = prefs.getInt('farm_water_turn_end_minute') ?? 0;
+    final defaultMinutes = prefs.getInt('farm_water_default_minutes') ?? 0;
+    final season = prefs.getString('farm_default_season') ?? 'Rabi';
+    final year = prefs.getInt('farm_default_year') ?? DateTime.now().year;
+    final minuteController = TextEditingController(text: defaultMinutes == 0 ? '' : defaultMinutes.toString());
+    var selectedDay = day;
+    var from = TimeOfDay(hour: startHour, minute: startMinute);
+    var to = TimeOfDay(hour: endHour, minute: endMinute);
+    var selectedSeason = season;
+    var selectedYear = year;
+    String timeLabel(TimeOfDay t) => t.format(context);
+    Future<TimeOfDay?> pickTime(TimeOfDay initial) => showTimePicker(context: context, initialTime: initial);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Farm Defaults / Settings'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              DropdownButtonFormField<int>(
+                value: selectedDay,
+                decoration: const InputDecoration(labelText: 'Nahar ki baari ka din (optional)'),
+                items: const [
+                  DropdownMenuItem(value: -1, child: Text('Set nahi kiya')),
+                  DropdownMenuItem(value: 1, child: Text('Monday')),
+                  DropdownMenuItem(value: 2, child: Text('Tuesday')),
+                  DropdownMenuItem(value: 3, child: Text('Wednesday')),
+                  DropdownMenuItem(value: 4, child: Text('Thursday')),
+                  DropdownMenuItem(value: 5, child: Text('Friday')),
+                  DropdownMenuItem(value: 6, child: Text('Saturday')),
+                  DropdownMenuItem(value: 7, child: Text('Sunday')),
+                ],
+                onChanged: (v) => setDialogState(() => selectedDay = v ?? -1),
+              ),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(child: OutlinedButton(onPressed: () async { final v = await pickTime(from); if (v != null) setDialogState(() => from = v); }, child: Text('From: ${timeLabel(from)}'))),
+                const SizedBox(width: 8),
+                Expanded(child: OutlinedButton(onPressed: () async { final v = await pickTime(to); if (v != null) setDialogState(() => to = v); }, child: Text('To: ${timeLabel(to)}'))),
+              ]),
+              const SizedBox(height: 8),
+              TextField(controller: minuteController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Default water minutes (optional)')),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                value: selectedSeason,
+                decoration: const InputDecoration(labelText: 'Default season'),
+                items: const ['Rabi','Kharif'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+                onChanged: (v) => setDialogState(() => selectedSeason = v ?? selectedSeason),
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<int>(
+                value: selectedYear,
+                decoration: const InputDecoration(labelText: 'Default year'),
+                items: List.generate(9, (i) => DateTime.now().year - 3 + i).map((v) => DropdownMenuItem(value: v, child: Text(v.toString()))).toList(),
+                onChanged: (v) => setDialogState(() => selectedYear = v ?? selectedYear),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            FilledButton(onPressed: () async {
+              await prefs.setInt('farm_water_turn_day', selectedDay);
+              await prefs.setInt('farm_water_turn_start_hour', from.hour);
+              await prefs.setInt('farm_water_turn_start_minute', from.minute);
+              await prefs.setInt('farm_water_turn_end_hour', to.hour);
+              await prefs.setInt('farm_water_turn_end_minute', to.minute);
+              await prefs.setInt('farm_water_default_minutes', int.tryParse(minuteController.text.trim()) ?? 0);
+              await prefs.setString('farm_default_season', selectedSeason);
+              await prefs.setInt('farm_default_year', selectedYear);
+              if (mounted) Navigator.pop(dialogContext);
+            }, child: const Text('Save')),
+          ],
+        ),
+      ),
+    );
+    minuteController.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final titles = ['DASHBOARD', 'HISAB', 'KHET', 'DOCUMENTS', 'HISTORY'];
@@ -188,6 +273,11 @@ class _KhataHomeState extends State<KhataHome> {
           style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.1),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Farm defaults',
+            onPressed: _showFarmSettings,
+            icon: const Icon(Icons.settings_outlined),
+          ),
           IconButton(
             tooltip: 'Backup and restore',
             onPressed: _showBackupActions,
