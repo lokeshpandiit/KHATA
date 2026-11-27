@@ -821,6 +821,9 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   final _minutes = TextEditingController();
   final _ownMinutes = TextEditingController();
   final _borrowedMinutes = TextEditingController();
+  final _borrowedNaharMinutes = TextEditingController();
+  final _borrowedKuaMinutes = TextEditingController();
+  String _borrowedSource = 'Nahar';
   final _note = TextEditingController();
   String? _contactId;
   Map<String, int> _selectedPlots = {};
@@ -866,6 +869,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
     _minutes.dispose();
     _ownMinutes.dispose();
     _borrowedMinutes.dispose();
+    _borrowedNaharMinutes.dispose();
+    _borrowedKuaMinutes.dispose();
     _note.dispose();
     _ownerNameController.dispose();
     super.dispose();
@@ -912,7 +917,11 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   Future<void> _save() async {
     final plotMode = widget.initialPlotId != null;
     final ownMinutes = int.tryParse(_ownMinutes.text.trim()) ?? 0;
-    final borrowedMinutes = int.tryParse(_borrowedMinutes.text.trim()) ?? 0;
+    final borrowedMinutes = _borrowedSource == 'Nahar'
+        ? (int.tryParse(_borrowedNaharMinutes.text.trim()) ?? 0)
+        : _borrowedSource == 'Kua'
+            ? (int.tryParse(_borrowedKuaMinutes.text.trim()) ?? 0)
+            : (int.tryParse(_borrowedNaharMinutes.text.trim()) ?? 0) + (int.tryParse(_borrowedKuaMinutes.text.trim()) ?? 0);
     final minutes = plotMode
         ? ownMinutes + (_borrowedWater ? borrowedMinutes : 0)
         : (int.tryParse(_minutes.text.trim()) ?? 0);
@@ -1113,12 +1122,27 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
               decoration: const InputDecoration(labelText: 'Apni baari ke minutes (optional)')),
             if (_borrowedWater) ...[
               const SizedBox(height: 12),
-              TextField(controller: _borrowedMinutes, keyboardType: TextInputType.number,
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(labelText: 'Dusre se liye pani ke minutes (required)')),
+              DropdownButtonFormField<String>(
+                initialValue: _borrowedSource,
+                decoration: const InputDecoration(labelText: 'Extra pani kahan se liya?'),
+                items: const [
+                  DropdownMenuItem(value: 'Nahar', child: Text('Nahar')),
+                  DropdownMenuItem(value: 'Kua', child: Text('Kua')),
+                  DropdownMenuItem(value: 'Mix', child: Text('Nahar + Kua (Mix)')),
+                ],
+                onChanged: (value) => setState(() => _borrowedSource = value ?? _borrowedSource),
+              ),
+              if (_borrowedSource == 'Nahar' || _borrowedSource == 'Mix')
+                TextField(controller: _borrowedNaharMinutes, keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(labelText: 'Nahar se liye minutes (required)')),
+              if (_borrowedSource == 'Kua' || _borrowedSource == 'Mix')
+                TextField(controller: _borrowedKuaMinutes, keyboardType: TextInputType.number,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(labelText: 'Kua se liye minutes (required)')),
             ],
             const SizedBox(height: 8),
-            Text('Total: ' + formatMinutes((int.tryParse(_ownMinutes.text) ?? 0) + (_borrowedWater ? (int.tryParse(_borrowedMinutes.text) ?? 0) : 0))),
+            Text('Total: ' + formatMinutes((int.tryParse(_ownMinutes.text) ?? 0) + (_borrowedWater ? borrowedMinutes : 0))),
           ] else ...[
             DropdownButtonFormField<String>(
               initialValue: _wellType,
