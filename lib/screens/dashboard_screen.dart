@@ -116,7 +116,13 @@ class DashboardScreen extends StatelessWidget {
         Row(children: [
           Expanded(child: _MetricCard(title: 'Today records', value: todayCount.toString(), icon: Icons.today, tint: const Color(0xFFE5F2EC))),
           const SizedBox(width: 10),
-          Expanded(child: _MetricCard(title: 'This month Hisab', value: money.format(monthHisabAmount), icon: Icons.receipt_long, tint: const Color(0xFFEAF0FA))),
+          Expanded(child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => _MonthPersonLedgerScreen(rows: hisabs.where(thisMonth).toList()),
+            )),
+            child: _MetricCard(title: 'This month Hisab', value: money.format(monthHisabAmount), icon: Icons.receipt_long, tint: const Color(0xFFEAF0FA)),
+          )),
         ]),
         const SizedBox(height: 10),
         Row(children: [
@@ -223,4 +229,98 @@ class _SummaryLine extends StatelessWidget {
     Text(label, style: TextStyle(fontWeight: bold ? FontWeight.w700 : FontWeight.normal)),
     Text(value, style: TextStyle(fontWeight: bold ? FontWeight.w800 : FontWeight.w600)),
   ]);
+}
+
+
+class _MonthPersonLedgerScreen extends StatelessWidget {
+  const _MonthPersonLedgerScreen({required this.rows});
+  final List<Map<String, dynamic>> rows;
+
+  double _amount(dynamic value) => value is num ? value.toDouble() :
+      double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
+  String _person(Map<String, dynamic> row) {
+    final name = (row['personName'] ?? '').toString().trim();
+    return name.isEmpty ? 'Unknown person' : name;
+  }
+  double _delta(Map<String, dynamic> row) {
+    final amount = _amount(row['amount']);
+    return row['direction'] == 'PAID' ? -amount : amount;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final people = <String, List<Map<String, dynamic>>>{};
+    for (final row in rows.where((r) => r['category'] == 'Len-Den')) {
+      people.putIfAbsent(_person(row), () => []).add(row);
+    }
+    final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+    final sorted = people.keys.toList()..sort();
+    return Scaffold(
+      appBar: AppBar(title: const Text('This month · Person Hisab')),
+      body: sorted.isEmpty
+          ? const Center(child: Text('Is month person-to-person Len-Den entries nahi hain.'))
+          : ListView(padding: const EdgeInsets.all(16), children: sorted.map((name) {
+              final personRows = people[name]!..sort((a,b) =>
+                (DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(0))
+                  .compareTo(DateTime.tryParse(a['date'] as String? ?? '') ?? DateTime(0)));
+              final net = personRows.fold<double>(0, (s,r) => s + _delta(r));
+              return Card(
+                child: ListTile(
+                  title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: Text('Entries: ${personRows.length} · Tap for full details'),
+                  trailing: Text('${net >= 0 ? '+' : '−'}${money.format(net.abs())}',
+                    style: TextStyle(fontWeight: FontWeight.w800, color: net >= 0 ? Colors.green : Colors.red)),
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => _PersonMonthDetailScreen(name: name, rows: personRows),
+                  )),
+                ),
+              );
+            }).toList()),
+    );
+  }
+}
+
+class _PersonMonthDetailScreen extends StatelessWidget {
+  const _PersonMonthDetailScreen({required this.name, required this.rows});
+  final String name;
+  final List<Map<String, dynamic>> rows;
+
+  double _amount(dynamic value) => value is num ? value.toDouble() :
+      double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...rows]..sort((a,b) =>
+      (DateTime.tryParse(a['date'] as String? ?? '') ?? DateTime(0))
+        .compareTo(DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(0)));
+    final given = sorted.where((r) => r['direction'] == 'PAID').fold<double>(0, (s,r)=>s+_amount(r['amount']));
+    final taken = sorted.where((r) => r['direction'] != 'PAID').fold<double>(0, (s,r)=>s+_amount(r['amount']));
+    final net = taken-given;
+    final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+    return Scaffold(
+      appBar: AppBar(title: Text(name, overflow: TextOverflow.ellipsis)),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('NET BALANCE', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text('${net >= 0 ? '+' : '−'}${money.format(net.abs())}', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: net >= 0 ? Colors.green : Colors.red)),
+          const SizedBox(height: 8),
+          Text('Paise liye: ${money.format(taken)}   ·   Paise diye: ${money.format(given)}'),
+        ]))),
+        const SizedBox(height: 10),
+        const Text('Transaction history', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        ...sorted.map((row) {
+          final paid = row['direction'] == 'PAID';
+          final date = DateTime.tryParse(row['date'] as String? ?? '');
+          final amount = _amount(row['amount']);
+          return Card(child: ListTile(
+            leading: Icon(paid ? Icons.arrow_upward : Icons.arrow_downward, color: paid ? Colors.red : Colors.green),
+            title: Text(paid ? 'Paise diye' : 'Paise liye'),
+            subtitle: Text('${date == null ? 'Date unavailable' : DateFormat('dd MMM yyyy · hh:mm a').format(date)}${(row['note'] ?? '').toString().trim().isEmpty ? '' : '\\n${row['note']}'}'),
+            trailing: Text('${paid ? '−' : '+'}${money.format(amount)}', style: TextStyle(fontWeight: FontWeight.w800, color: paid ? Colors.red : Colors.green)),
+          ));
+        }),
+      ]),
+    );
+  }
 }
