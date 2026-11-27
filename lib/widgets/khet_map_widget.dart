@@ -100,9 +100,10 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
     final empty = number.isEmpty && name.isEmpty;
     return Container(
       constraints: BoxConstraints(maxWidth: cellWidth * 0.94),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       decoration: BoxDecoration(
-        color: empty && !_editing ? Colors.transparent : const Color(0xE6283328),
+        // Opaque badge hides the map's baked-in lettering underneath.
+        color: empty && !_editing ? Colors.transparent : const Color(0xFF263328),
         borderRadius: BorderRadius.circular(9),
         border: _editing ? Border.all(color: Colors.white, width: 1.4) : null,
       ),
@@ -111,7 +112,7 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
           : Column(mainAxisSize: MainAxisSize.min, children: [
               if (number.isNotEmpty)
                 Text(number, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15, height: 1)),
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14, height: 1)),
               if (name.isNotEmpty)
                 Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 8, height: 1.1)),
@@ -158,7 +159,7 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
                   for (final plot in plots)
                     Positioned(
                       // Expand the tap target around each plot center without moving its label.
-                      left: width * (croppedLeft + (plot['column'] as num).toDouble() * croppedCellWidth - croppedCellWidth * 0.17),
+                      left: width * (croppedLeft + (plot['column'] as num).toDouble() * croppedCellWidth - croppedCellWidth * 0.17 - 0.055),
                       top: height * (top + (plot['row'] as num).toDouble() * cellHeight - cellHeight * 0.17),
                       width: width * croppedCellWidth * 1.34,
                       height: height * cellHeight * 1.34,
