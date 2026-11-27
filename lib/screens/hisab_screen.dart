@@ -397,7 +397,6 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
             TextField(controller: _customCategory, textCapitalization: TextCapitalization.words,
               decoration: const InputDecoration(labelText: 'Apni category ka naam likhein', hintText: 'Jaise: Ghar, Personal, Repair, Udhaar')),
           ],
-          ),
           const SizedBox(height: 12),
           TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title (optional)')),
           const SizedBox(height: 12),
