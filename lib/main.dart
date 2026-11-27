@@ -198,6 +198,10 @@ class _KhataHomeState extends State<KhataHome> {
       text: prefs.getString('pani_given_message') ?? 'Aaj {naam} ko {minute} pani diya hai. Date: {date}',
     );
     String label(TimeOfDay t) => t.format(context);
+    String durationLabel(TimeOfDay a, TimeOfDay b) {
+      final mins = (b.hour * 60 + b.minute - (a.hour * 60 + a.minute) + 1440) % 1440;
+      return mins >= 60 ? '${mins ~/ 60} hr ${mins % 60} min' : '$mins min';
+    }
     Future<TimeOfDay?> pick(TimeOfDay t) => showTimePicker(context: context, initialTime: t);
     await showDialog<void>(
       context: context,
@@ -227,7 +231,7 @@ class _KhataHomeState extends State<KhataHome> {
                 Expanded(child: OutlinedButton(onPressed: () async { final v=await pick(to); if(v!=null)setDialogState(()=>to=v); }, child: Text('To: ${label(to)}'))),
               ]),
               const SizedBox(height: 6),
-              Align(alignment: Alignment.centerLeft, child: Text('Total duration: ${formatMinutes((to.hour * 60 + to.minute - (from.hour * 60 + from.minute) + 1440) % 1440)}', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600))),
+              Align(alignment: Alignment.centerLeft, child: Text('Total duration: ${durationLabel(from, to)}', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600))),
               const SizedBox(height: 16),
               TextField(controller: received, maxLines: 3, decoration: const InputDecoration(labelText: 'Default message — PANI LIYA (received)', helperText: 'Use: {naam}, {minute}, {date}')),
               const SizedBox(height: 12),
