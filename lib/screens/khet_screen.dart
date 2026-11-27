@@ -1567,20 +1567,47 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
   final _paid = TextEditingController(text: '0');
   final _note = TextEditingController();
   String _person = '';
+  final _manualPerson = TextEditingController();
+  List<String> _savedPeople = [];
   String _direction = 'Humne dusre ka kua chalaya';
   String _well = 'Solar';
   bool _saving = false;
 
   @override
   void dispose() {
-    for (final c in [_oneMinutes, _solar, _diesel, _exchange, _cash, _paid, _note]) { c.dispose(); }
+    for (final c in [_oneMinutes, _solar, _diesel, _exchange, _cash, _paid, _note, _manualPerson]) { c.dispose(); }
     super.dispose();
+  }
+
+
+  Future<void> _loadPeople() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) setState(() => _savedPeople = prefs.getStringList('kua_saved_people') ?? []);
+  }
+
+  Future<void> _addSavedPerson({String? name}) async {
+    final controller = TextEditingController(text: name ?? '');
+    final value = await showDialog<String>(context: context, builder: (ctx) => AlertDialog(
+      title: const Text('Kua chalane wale ka naam add karein'),
+      content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: 'Naam')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        FilledButton(onPressed: () { final n=controller.text.trim(); if(n.isNotEmpty) Navigator.pop(ctx,n); }, child: const Text('Add')),
+      ],
+    ));
+    controller.dispose();
+    if (value == null || value.trim().isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('kua_saved_people') ?? [];
+    if (!list.any((n) => n.toLowerCase() == value.trim().toLowerCase())) list.add(value.trim());
+    await prefs.setStringList('kua_saved_people', list);
+    if (mounted) setState(() { _savedPeople=list; _person=value.trim(); _manualPerson.clear(); });
   }
 
   Future<void> _pickPerson() async {
     try {
       final p = await ContactPickerService.pickPhoneContact();
-      if (p != null && mounted) setState(() => _person = (p['name'] ?? '').toString());
+      if (p != null && mounted) await _addSavedPerson(name: (p['name'] ?? '').toString());
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Contact select nahi hua: $e')));
     }
@@ -1614,7 +1641,7 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
       await _storage.addRecord('khet', {
         'id': now.microsecondsSinceEpoch.toString(),
         'type': 'KUA',
-        'contact': _person.trim().isEmpty ? 'Samne wala' : _person.trim(),
+        'contact': _manualPerson.text.trim().isNotEmpty ? _manualPerson.text.trim() : (_person.trim().isEmpty ? 'Samne wala' : _person.trim()),
         'direction': _direction,
         'wellSelection': _well,
         'wellMinutes': mins,
@@ -1634,11 +1661,26 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
   }
 
   @override
+  void initState() { super.initState(); _loadPeople(); }
+
+  @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Kua Hisab')),
     body: ListView(padding: const EdgeInsets.all(16), children: [
-      OutlinedButton.icon(onPressed: _pickPerson, icon: const Icon(Icons.contacts_outlined),
-        label: Text(_person.isEmpty ? 'Kis vyakti ke saath hisab?' : _person)),
+      Row(children: [
+        Expanded(child: DropdownButtonFormField<String>(
+          value: _savedPeople.contains(_person) ? _person : null,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'Kua chalane wala (saved list)'),
+          hint: const Text('Vyakti select karein'),
+          items: _savedPeople.map((name) => DropdownMenuItem(value: name, child: Text(name, overflow: TextOverflow.ellipsis))).toList(),
+          onChanged: (v) => setState(() { _person = v ?? ''; _manualPerson.clear(); }),
+        )),
+        IconButton(tooltip: 'Contact se add', onPressed: _pickPerson, icon: const Icon(Icons.contacts_outlined)),
+        IconButton(tooltip: 'Naam manually add', onPressed: () => _addSavedPerson(), icon: const Icon(Icons.person_add_alt_1)),
+      ]),
+      const SizedBox(height: 8),
+      TextField(controller: _manualPerson, decoration: const InputDecoration(labelText: 'Ya naam manually likhein (optional)'), onChanged: (_) => setState(() => _person = '')),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
         value: _direction,
