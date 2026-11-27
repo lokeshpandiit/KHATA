@@ -1725,15 +1725,16 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
                   else _harvestDate ??= DateTime.now();
                 }),
               ),
-              if (_harvestDate != null)
-                OutlinedButton.icon(
-                  onPressed: _pickHarvestDate,
-                  icon: const Icon(Icons.event_available_outlined),
-                  label: Text(
-                    (_harvested ? 'Fasal katne ki date: ' : 'Planned fasal katne ki date: ') +
-                        DateFormat('dd MMM yyyy').format(_harvestDate!),
-                  ),
+              OutlinedButton.icon(
+                onPressed: _pickHarvestDate,
+                icon: const Icon(Icons.event_available_outlined),
+                label: Text(
+                  _harvestDate == null
+                      ? 'Fasal katne ki date / planned date chunein'
+                      : (_harvested ? 'Fasal katne ki date: ' : 'Planned fasal katne ki date: ') +
+                          DateFormat('dd MMM yyyy').format(_harvestDate!),
                 ),
+              ),
             ],
           ],
           const SizedBox(height: 12),
