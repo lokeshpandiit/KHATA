@@ -238,6 +238,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_contacts:
+    dependency: "direct main"
+    description:
+      name: flutter_contacts
+      sha256: da04f2541d03e70070370e3e2a0b11d3cc4ce7c987d39918a4dd4952e6d87ac2
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.6.0"
   flutter_lints:
     dependency: "direct dev"
     description:
@@ -949,6 +957,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.1.2"
+  whatsapp_share2:
+    dependency: "direct main"
+    description:
+      name: whatsapp_share2
+      sha256: "0ed7a29f55be2230f597d817324c293bb7e99578d0e979edfa0b6c767ba09288"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.1.1"
   win32:
     dependency: transitive
     description:
