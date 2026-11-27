@@ -20,30 +20,6 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// Ensure Android library modules use compileSdk 36 after their own DSL
-// configuration has completed. Register afterEvaluate only when the project
-// has not already been evaluated, avoiding the late-registration failure.
-subprojects {
-    plugins.withId("com.android.library") {
-        val configureCompileSdk = {
-            val androidExtension = extensions.findByName("android")
-                ?: error("Android extension not found for $path")
-            val compileSdkSetter = androidExtension.javaClass.methods.firstOrNull {
-                (it.name == "setCompileSdk" || it.name == "setCompileSdkVersion") &&
-                    it.parameterTypes.singleOrNull() == Int::class.javaPrimitiveType
-            } ?: error("Could not configure compileSdk for $path")
-            compileSdkSetter.invoke(androidExtension, 36)
-        }
-
-        if (project.state.executed) {
-            configureCompileSdk()
-        } else {
-            project.afterEvaluate {
-                configureCompileSdk()
-            }
-        }
-    }
-}
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
