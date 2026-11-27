@@ -1196,9 +1196,17 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
 }
 
 class AddKhetItemScreen extends StatefulWidget {
-  const AddKhetItemScreen({required this.type, this.initialPlotId, super.key});
+  const AddKhetItemScreen({
+    required this.type,
+    this.initialPlotId,
+    this.initialSeason,
+    this.initialYear,
+    super.key,
+  });
   final String type;
   final String? initialPlotId;
+  final String? initialSeason;
+  final int? initialYear;
 
   @override
   State<AddKhetItemScreen> createState() => _AddKhetItemScreenState();
@@ -1227,6 +1235,8 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   void initState() {
     super.initState();
     _plotId = widget.initialPlotId;
+    if (widget.initialSeason != null) _season = widget.initialSeason!;
+    if (widget.initialYear != null) _year = widget.initialYear!;
     if (widget.initialPlotId != null) {
       final plots = _storage.records('plots').where((p) => p['id'] == widget.initialPlotId);
       if (plots.isNotEmpty) {
