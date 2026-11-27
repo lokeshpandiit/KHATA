@@ -915,6 +915,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final plotMode = widget.initialPlotId != null;
     final ownMinutes = int.tryParse(_ownMinutes.text.trim()) ?? 0;
     final borrowedMinutes = _borrowedSource == 'Nahar'
@@ -1052,6 +1053,9 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   Widget build(BuildContext context) {
     final contacts = _contacts;
     final selected = contacts.where((item) => item['id'] == _contactId).toList();
+    final naharPreview = int.tryParse(_borrowedNaharMinutes.text.trim()) ?? 0;
+    final kuaPreview = int.tryParse(_borrowedKuaMinutes.text.trim()) ?? 0;
+    final _previewBorrowedMinutes = _borrowedSource == 'Nahar' ? naharPreview : _borrowedSource == 'Kua' ? kuaPreview : naharPreview + kuaPreview;
     return Scaffold(
       appBar: AppBar(title: const Text('Add Pani Hisab')),
       body: ListView(
@@ -1086,20 +1090,6 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
             const SizedBox(height: 8),
             const Text('Har kille mein Full Killa ya Partial kyari alag select karein. Pani ke total minutes kyari ke anupat mein bantenge.',
                 style: TextStyle(color: Colors.black54, fontSize: 12)),
-            if (widget.type == 'KHAD') ...[
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _fertilizerKind,
-                decoration: const InputDecoration(labelText: 'Khaad ka type'),
-                items: const [
-                  DropdownMenuItem(value: 'DAP', child: Text('DAP')),
-                  DropdownMenuItem(value: 'Urea', child: Text('Urea')),
-                  DropdownMenuItem(value: 'Potash', child: Text('Potash')),
-                  DropdownMenuItem(value: 'Other fertilizer', child: Text('Other khaad')),
-                ],
-                onChanged: (value) => setState(() => _fertilizerKind = value ?? _fertilizerKind),
-              ),
-            ],
             const SizedBox(height: 12),
             SeasonYearFields(
               season: _season,
@@ -1156,7 +1146,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
                   decoration: const InputDecoration(labelText: 'Kua se liye minutes (required)')),
             ],
             const SizedBox(height: 8),
-            Text('Total: ' + formatMinutes((int.tryParse(_ownMinutes.text) ?? 0) + (_borrowedWater ? borrowedMinutes : 0))),
+            Text('Total: ' + formatMinutes((int.tryParse(_ownMinutes.text.trim()) ?? 0) + (_borrowedWater ? _previewBorrowedMinutes : 0))),
           ] else ...[
             DropdownButtonFormField<String>(
               initialValue: _wellType,
@@ -1264,7 +1254,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
 
   bool get _needsFarmDetails => ['FASAL', 'HARA_BEEJ', 'DAWAI', 'KHAD'].contains(widget.type) && !(widget.type == 'DAWAI' && _khalaOnly);
   String get _dateLabel => widget.type == 'FASAL' || widget.type == 'HARA_BEEJ'
-      ? 'Beejne ki date' : 'Dawai dalne ki date';
+      ? 'Beejne ki date' : widget.type == 'KHAD' ? 'Khaad dalne ki date' : 'Dawai dalne ki date';
 
   Map<String, dynamic>? _currentCropFor(String? plotId) {
     if (plotId == null) return null;
@@ -1375,10 +1365,12 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final title = _title.text.trim();
     final price = double.tryParse(_price.text.trim()) ?? 0;
+    if (_saving) return;
     if (title.isEmpty) {
-      _error(widget.type == 'FASAL' ? 'Fasal ka naam likhein' : widget.type == 'DAWAI' ? 'Dawai ka naam likhein' : 'Naam likhein');
+      _error(widget.type == 'FASAL' ? 'Fasal ka naam likhein' : widget.type == 'DAWAI' ? 'Dawai ka naam likhein' : widget.type == 'KHAD' ? 'Khaad ka naam likhein' : 'Naam likhein');
       return;
     }
     if (_needsFarmDetails && _selectedPlots.isEmpty) {
@@ -1438,7 +1430,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
         final totalKyaris = plotMatches.isEmpty
             ? 0
             : (plotMatches.first['totalKyaris'] as num?)?.toInt() ?? 0;
-        final currentCrop = widget.type == 'DAWAI' ? _currentCropFor(plotId) : null;
+        final currentCrop = widget.type == 'DAWAI' || widget.type == 'KHAD' ? _currentCropFor(plotId) : null;
         final plotPrice = _needsFarmDetails
             ? (index == count - 1
                 ? price - allocatedPrice
@@ -1590,7 +1582,15 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
               title: const Text('Khala / kachhe nale par spray'),
               subtitle: const Text('Is entry ko kisi kille se link na karein'),
               value: _khalaOnly,
-              onChanged: (value) => setState(() { _khalaOnly = value; if (value) _selectedPlots.clear(); }),
+              onChanged: (value) => setState(() {
+                  _khalaOnly = value;
+                  if (value) { _selectedPlots.clear(); _plotId = null; }
+                  else if (widget.initialPlotId != null) {
+                    _plotId = widget.initialPlotId;
+                    final matches = _storage.records('plots').where((p) => p['id'] == widget.initialPlotId);
+                    if (matches.isNotEmpty) _selectedPlots[widget.initialPlotId!] = (matches.first['totalKyaris'] as num?)?.toInt() ?? 0;
+                  }
+                }),
             ),
             if (_khalaOnly) TextField(controller: _areaController, decoration: const InputDecoration(labelText: 'Jagah (optional)', hintText: 'Khala / kacha nala')),
           ],
@@ -1632,6 +1632,20 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
                   DropdownMenuItem(value: 'Other spray', child: Text('Other spray')),
                 ],
                 onChanged: (value) => setState(() => _purpose = value ?? _purpose),
+              ),
+            ],
+            if (widget.type == 'KHAD') ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _fertilizerKind,
+                decoration: const InputDecoration(labelText: 'Khaad ka type'),
+                items: const [
+                  DropdownMenuItem(value: 'DAP', child: Text('DAP')),
+                  DropdownMenuItem(value: 'Urea', child: Text('Urea')),
+                  DropdownMenuItem(value: 'Potash', child: Text('Potash')),
+                  DropdownMenuItem(value: 'Other fertilizer', child: Text('Other khaad')),
+                ],
+                onChanged: (value) => setState(() => _fertilizerKind = value ?? _fertilizerKind),
               ),
             ],
             const SizedBox(height: 12),
