@@ -62,45 +62,10 @@ class DashboardScreen extends StatelessWidget {
     final monthKhetAmount = khet.where(thisMonth)
         .where((row) => row['type'] != 'PANI' && row['type'] != 'TRACTOR')
         .fold<double>(0, (sum, row) => sum + _amount(row['price']));
-    final monthTractorAmount = khet.where((row) => thisMonth(row) && row['type'] == 'TRACTOR')
-        .fold<double>(0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['price']));
-    final monthPani = khet.where(thisMonth)
-        .where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON')
-        .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? int.tryParse('${row['minutes']}') ?? 0));
-    final todayCount = hisabs.where(today).length + khet.where(today).length;
     final pending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0).toList()
       ..sort((a, b) => (DateTime.tryParse(a['dueDate'] as String? ?? '') ?? DateTime(9999))
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '') ?? DateTime(9999)));
     final pendingTotal = pending.fold<double>(0, (sum, row) => sum + _balance(row));
-    final recent = <_Recent>[];
-    for (final row in hisabs) {
-      recent.add(_Recent('HISAB', (row['title'] ?? row['category'] ?? 'Hisab').toString(),
-        _amount(row['amount']), _date(row), row['direction'] as String?));
-    }
-    for (final row in khet) {
-      final type = row['type'] == 'PANI' ? 'PANI' : (row['type'] == 'TRACTOR' ? 'TRACTOR' : 'KHET');
-      recent.add(_Recent(
-        type,
-        row['type'] == 'PANI'
-            ? 'Pani · ${row['plotId'] == null ? 'Khet' : plotLabelForId(storage, row['plotId'])}'
-            : (row['title'] ?? row['contact'] ?? row['customerName'] ?? row['type'] ?? 'Khet').toString(),
-        _amount(row['price'] ?? row['totalAmount']),
-        _date(row),
-        null,
-        row['type'] == 'PANI'
-            ? [
-                if ((row['direction'] ?? '').toString().isNotEmpty) 'Len-den: ${row['direction']}',
-                if ((row['wellType'] ?? '').toString().isNotEmpty) 'Kua: ${row['wellType']}',
-                if ((row['source'] ?? '').toString().isNotEmpty) 'Source: ${row['source']}',
-                if (row['contact'] != null) 'Contact: ${row['contact']}',
-                if ((row['minutes'] as num?)?.toInt() != null) 'Time: ${row['minutes']} min',
-                if (row['wetKyaris'] != null) 'Kyari: ${row['wetKyaris']} bheegi',
-                if (row['season'] != null || row['year'] != null) 'Season: ${row['season'] ?? ''} ${row['year'] ?? ''}',
-              ].join(' · ')
-            : null,
-      ));
-    }
-    recent.sort((a, b) => (b.date ?? DateTime(0)).compareTo(a.date ?? DateTime(0)));
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
     final range = '${DateFormat('dd MMM yyyy').format(monthStart)} – ${DateFormat('dd MMM yyyy').format(monthEnd)}';
 
@@ -114,7 +79,7 @@ class DashboardScreen extends StatelessWidget {
         const KhetMapWidget(),
         const SizedBox(height: 18),
         Row(children: [
-          Expanded(child: _MetricCard(title: 'Today records', value: todayCount.toString(), icon: Icons.today, tint: const Color(0xFFE5F2EC))),
+          Expanded(child: _MetricCard(title: 'Pending payments', value: money.format(pendingTotal), icon: Icons.pending_actions, tint: const Color(0xFFE5F2EC))),
           const SizedBox(width: 10),
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
@@ -197,15 +162,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-}
-
-class _Recent {
-  _Recent(this.type, this.title, this.amount, this.date, this.direction, [this.details]);
-  final String type, title;
-  final double amount;
-  final DateTime? date;
-  final String? direction;
-  final String? details;
 }
 
 class _MetricCard extends StatelessWidget {
