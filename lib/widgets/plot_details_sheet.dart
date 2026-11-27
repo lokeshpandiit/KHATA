@@ -119,7 +119,8 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
         final fodder = entries.where((row) => row['type'] == 'HARA_BEEJ').toList();
         final dawai = entries.where((row) => row['type'] == 'DAWAI').toList();
         final latestPani = pani.isEmpty ? null : pani.first;
-        final latestCrop = crops.isEmpty ? null : crops.first;
+        final activeCrops = crops.where((row) => row['harvested'] != true).toList();
+        final latestCrop = activeCrops.isEmpty ? null : activeCrops.first;
         final totalKyaris = (widget.plot['totalKyaris'] as num?)?.toInt() ?? 0;
         final wetKyaris = (latestPani?['wetKyaris'] as num?)?.toInt() ?? 0;
         final remainingKyaris = latestPani == null
