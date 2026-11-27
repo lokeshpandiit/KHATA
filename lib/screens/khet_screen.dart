@@ -12,7 +12,6 @@ import '../widgets/khata_widgets.dart';
 import '../widgets/plot_selector.dart';
 import '../widgets/farm_fields.dart';
 import '../services/farm_reminder_service.dart';
-import '../widgets/farm_fields.dart';
 
 class KhetScreen extends StatefulWidget {
   const KhetScreen({super.key});
@@ -327,7 +326,7 @@ class _KhetScreenState extends State<KhetScreen> {
     final months = availableMonths(_entries);
     if (!months.contains(_month)) _month = 'All months';
     final rows = _filtered;
-    const tabs = ['ALL', 'DAWAI', 'FASAL', 'PANI', 'TRACTOR', 'OTHER', 'PENDING'];
+    const tabs = ['ALL', 'DAWAI', 'FASAL', 'HARA_BEEJ', 'PANI', 'TRACTOR', 'OTHER', 'PENDING'];
     final addLabel = switch (_tab) {
       'DAWAI' => 'Add Dawai',
       'FASAL' => 'Add Fasal',
