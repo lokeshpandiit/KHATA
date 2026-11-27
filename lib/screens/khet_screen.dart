@@ -1014,7 +1014,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
           allocatedOwnMinutes += plotOwnMinutes;
           allocatedBorrowedMinutes += plotBorrowedMinutes;
           final plotRecord = Map<String, dynamic>.from(baseRecord)
-            ..['id'] = (int.parse(batchId) + index).toString()
+            ..['id'] = '${batchId}_$index'
             ..['plotId'] = entry.key
             ..['plotIds'] = allPlotIds
             ..['selectedPlotCount'] = selectedPlotEntries.length
@@ -1438,7 +1438,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
             : price;
         allocatedPrice += plotPrice;
         final record = <String, dynamic>{
-          'id': (int.parse(batchId) + index).toString(),
+          'id': '${batchId}_$index',
           'batchId': batchId,
           'selectedPlotCount': _needsFarmDetails ? plotEntries.length : 0,
           'type': widget.type,
