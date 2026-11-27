@@ -36,7 +36,7 @@ class _HisabScreenState extends State<HisabScreen> {
 
   Future<void> _addHisab() async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const AddHisabScreen()),
+      MaterialPageRoute<void>(builder: (_) => AddHisabScreen(initialCategory: _category == 'Len-Den' ? 'Len-Den' : 'Khet')),
     );
     if (mounted) setState(() {});
   }
@@ -236,7 +236,9 @@ class _HisabScreenState extends State<HisabScreen> {
 }
 
 class AddHisabScreen extends StatefulWidget {
-  const AddHisabScreen({super.key});
+  const AddHisabScreen({super.key, this.initialCategory = 'Khet'});
+
+  final String initialCategory;
 
   @override
   State<AddHisabScreen> createState() => _AddHisabScreenState();
@@ -252,7 +254,7 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
   final _personName = TextEditingController();
   final _personPhone = TextEditingController();
   final List<String> _photos = [];
-  String _category = 'Khet';
+  late String _category = widget.initialCategory;
   String _direction = 'RECEIVED';
   String? _voice;
   String? _callRecording;
