@@ -11,6 +11,7 @@ import '../services/khata_sharing_service.dart';
 import '../services/storage_backup_service.dart';
 import '../widgets/khata_widgets.dart';
 import '../widgets/plot_selector.dart';
+import '../widgets/multi_plot_selector.dart';
 import '../widgets/farm_fields.dart';
 import '../services/farm_reminder_service.dart';
 import '../widgets/voice_dictation_field.dart';
@@ -1185,6 +1186,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   final List<String> _itemPhotos = [];
   final List<String> _billPhotos = [];
   String? _plotId;
+  Map<String, int> _selectedPlots = {};
   String _season = 'Rabi';
   int _year = DateTime.now().year;
   String _purpose = 'Herbicide (ghas khatam karne wali)';
@@ -1197,14 +1199,20 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   void initState() {
     super.initState();
     _plotId = widget.initialPlotId;
+    if (widget.initialPlotId != null) {
+      final plots = _storage.records('plots').where((p) => p['id'] == widget.initialPlotId);
+      if (plots.isNotEmpty) {
+        _selectedPlots[widget.initialPlotId!] = (plots.first['totalKyaris'] as num?)?.toInt() ?? 0;
+      }
+    }
   }
 
   bool get _needsFarmDetails => ['FASAL', 'HARA_BEEJ', 'DAWAI'].contains(widget.type);
   String get _dateLabel => widget.type == 'FASAL' || widget.type == 'HARA_BEEJ'
       ? 'Beejne ki date' : 'Dawai dalne ki date';
 
-  Map<String, dynamic>? get _currentCrop {
-    if (_plotId == null) return null;
+  Map<String, dynamic>? _currentCropFor(String? plotId) {
+    if (plotId == null) return null;
     final applicationDay = DateTime(
       _activityDate.year,
       _activityDate.month,
@@ -1219,7 +1227,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     final crops = _storage.records('khet')
         .where((row) =>
             row['type'] == 'FASAL' &&
-            row['plotId'] == _plotId &&
+            row['plotId'] == plotId &&
             row['season'] == _season &&
             row['year'] == _year)
         .where((row) {
@@ -1234,6 +1242,8 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       .compareTo(sowingDate(a) ?? DateTime(0)));
     return crops.isEmpty ? null : crops.first;
   }
+
+  Map<String, dynamic>? get _currentCrop => _currentCropFor(_plotId);
 
   @override
   void dispose() {
