@@ -1340,6 +1340,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       return;
     }
     var totalSelectedKyaris = 0;
+    var hasPartialKyariSelection = false;
     if (_needsFarmDetails) {
       for (final entry in _selectedPlots.entries) {
         final matches = _storage.records('plots').where((plot) => plot['id'] == entry.key);
@@ -1353,12 +1354,10 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
           return;
         }
         totalSelectedKyaris += entry.value;
+        if (entry.value < total) hasPartialKyariSelection = true;
       }
     }
-    if (widget.type == 'HARA_BEEJ' &&
-        _selectedPlots.values.any((count) => count < ((_storage.records('plots')
-          .firstWhere((plot) => _selectedPlots.keys.contains(plot['id']))['totalKyaris'] as num?)?.toInt() ?? count)) &&
-        _kyariNumber.text.trim().isEmpty) {
+    if (widget.type == 'HARA_BEEJ' && hasPartialKyariSelection && _kyariNumber.text.trim().isEmpty) {
       _error('Partial killa ke liye kyari number/name likhein');
       return;
     }
@@ -1522,7 +1521,16 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
             textCapitalization: TextCapitalization.words,
           ),
           const SizedBox(height: 12),
-          KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+          if (farmPlot)
+            KhetMultiPlotSelector(
+              initialSelection: _selectedPlots,
+              onChanged: (value) => setState(() {
+                _selectedPlots = value;
+                _plotId = value.isEmpty ? null : value.keys.first;
+              }),
+            )
+          else
+            KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
           if (farmPlot) ...[
             const SizedBox(height: 8),
             if (widget.type == 'DAWAI')
