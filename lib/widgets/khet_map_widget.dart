@@ -96,27 +96,27 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
 
   Widget _plotBadge(Map<String, dynamic> plot, double cellWidth) {
     final number = (plot['number'] as String? ?? '').trim();
-    final name = (plot['name'] as String? ?? '').trim();
-    final empty = number.isEmpty && name.isEmpty;
+    final empty = number.isEmpty;
     return Container(
       constraints: BoxConstraints(maxWidth: cellWidth * 0.94),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
       decoration: BoxDecoration(
         // Opaque badge hides the map's baked-in lettering underneath.
         color: empty && !_editing ? Colors.transparent : const Color(0xFF263328),
-        borderRadius: BorderRadius.circular(9),
+        borderRadius: BorderRadius.circular(8),
         border: _editing ? Border.all(color: Colors.white, width: 1.4) : null,
       ),
       child: empty
           ? (_editing ? const Icon(Icons.add, color: Colors.white, size: 15) : const SizedBox.shrink())
-          : Column(mainAxisSize: MainAxisSize.min, children: [
-              if (number.isNotEmpty)
-                Text(number, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14, height: 1)),
-              if (name.isNotEmpty)
-                Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 8, height: 1.1)),
-            ]),
+          : SizedBox(
+              width: cellWidth * 0.82,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(number, maxLines: 1, softWrap: false,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, height: 1.1)),
+              ),
+            ),
     );
   }
 
