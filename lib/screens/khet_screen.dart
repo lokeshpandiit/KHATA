@@ -140,16 +140,52 @@ class _KhetScreenState extends State<KhetScreen> {
     final date = DateTime.tryParse(row['date'] as String? ?? '');
     final contact = _contacts.where((item) => item['id'] == row['contactId']).toList();
     final phone = (row['contactPhone'] ?? (contact.isEmpty ? null : contact.first['phone']))?.toString();
+    final note = (row['note'] as String? ?? '').trim();
+    var includeNote = false;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Share Pani Hisab'),
+          content: CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: includeNote,
+            onChanged: note.isEmpty
+                ? null
+                : (value) => setDialogState(() => includeNote = value ?? false),
+            title: const Text('Note bhi bhejna hai?'),
+            subtitle: Text(
+              note.isEmpty ? 'Is entry mein koi note nahi hai.' : note,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Share'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true) return;
+
     await KhataSharingService.share(
       phone: phone,
       text: [
         'Pani Hisab - ${_storage.senderName}',
-        'Contact: ${row['contact'] ?? ''}',
         'Source: ${row['source']}',
         'Kaam: ${row['direction']} / ${formatMinutes((row['minutes'] as num?)?.toInt() ?? 0)}',
-        if (date != null) 'Date: ${dateLabel(date)} ${timeLabel(date)}',
-        if ((row['note'] as String? ?? '').isNotEmpty) 'Note: ${row['note']}',
-      ].join('\n'),
+        if (date != null) 'Date: ${dateLabel(date)}',
+        if (includeNote && note.isNotEmpty) 'Note: $note',
+      ].join('\\n'),
     );
   }
 
