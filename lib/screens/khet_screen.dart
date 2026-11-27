@@ -1522,6 +1522,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
           record['sowingDate'] = activityDate.toIso8601String();
           record['harvested'] = _harvested;
           record['harvestDate'] = _harvested ? (_harvestDate ?? DateTime.now()).toIso8601String() : null;
+          record['plannedHarvestDate'] = !_harvested && _harvestDate != null ? _harvestDate!.toIso8601String() : null;
         }
         if (widget.type == 'HARA_BEEJ') {
           record['seedName'] = title;
