@@ -1257,7 +1257,8 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
             row['type'] == 'FASAL' &&
             row['plotId'] == plotId &&
             row['season'] == _season &&
-            row['year'] == _year)
+            row['year'] == _year &&
+            row['harvested'] != true)
         .where((row) {
           final date = sowingDate(row);
           if (date == null) return false;
