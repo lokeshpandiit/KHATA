@@ -80,6 +80,8 @@ class _KhetScreenState extends State<KhetScreen> {
       await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => const AddTractorWorkScreen(),
       ));
+    } else if (_tab == 'KUA') {
+      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const AddKuaHisabScreen()));
     } else if (_tab == 'PANI') {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => const AddPaniScreen()),
@@ -372,13 +374,14 @@ class _KhetScreenState extends State<KhetScreen> {
     final months = availableMonths(_entries);
     if (!months.contains(_month)) _month = 'All months';
     final rows = _filtered;
-    const tabs = ['ALL', 'DAWAI', 'FASAL', 'HARA_BEEJ', 'PANI', 'TRACTOR', 'OTHER', 'PENDING'];
+    const tabs = ['ALL', 'DAWAI', 'FASAL', 'HARA_BEEJ', 'PANI', 'TRACTOR', 'KUA', 'OTHER', 'PENDING'];
     final addLabel = switch (_tab) {
       'DAWAI' => 'Add Dawai',
       'FASAL' => 'Add Fasal',
       'HARA_BEEJ' => 'Add Hara Beej',
       'PANI' => 'Add Pani',
       'TRACTOR' || 'PENDING' => 'Add Tractor',
+      'KUA' => 'Add Kua Hisab',
       'OTHER' => 'Add Other',
       _ => 'Add Khet',
     };
@@ -503,6 +506,19 @@ class _KhetScreenState extends State<KhetScreen> {
   }
 
   Widget _entryCard(Map<String, dynamic> row) {
+    if (row['type'] == 'KUA') {
+      final mins = (row['wellMinutes'] as Map? ?? const {}).entries
+          .map((e) => '${e.key}: ${formatMinutes((e.value as num).toInt())}').join(' · ');
+      final cash = _amount(row['cashAmount']);
+      final paid = _amount(row['cashPaid']);
+      final balance = (cash - paid).clamp(0, double.infinity).toDouble();
+      return Card(margin: const EdgeInsets.only(bottom: 9), child: ListTile(
+        leading: const CircleAvatar(child: Icon(Icons.water_drop_outlined)),
+        title: Text((row['contact'] ?? 'Kua hisab').toString()),
+        subtitle: Text('${row['direction'] ?? ''}\n$mins\nBadle mein: ${formatMinutes((row['exchangeMinutes'] as num?)?.toInt() ?? 0)} · Cash ₹${cash.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)} · Baaki ₹${balance.toStringAsFixed(0)}'),
+        isThreeLine: true,
+      ));
+    }
     if (row['type'] == 'PANI') {
       final date = DateTime.tryParse(row['date'] as String? ?? '');
       return Card(
@@ -1375,6 +1391,141 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       ),
     );
   }
+}
+
+class AddKuaHisabScreen extends StatefulWidget {
+  const AddKuaHisabScreen({super.key});
+  @override
+  State<AddKuaHisabScreen> createState() => _AddKuaHisabScreenState();
+}
+
+class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
+  final _storage = StorageBackupService.instance;
+  final _oneMinutes = TextEditingController();
+  final _solar = TextEditingController();
+  final _diesel = TextEditingController();
+  final _exchange = TextEditingController(text: '0');
+  final _cash = TextEditingController(text: '0');
+  final _paid = TextEditingController(text: '0');
+  final _note = TextEditingController();
+  String _person = '';
+  String _direction = 'Humne dusre ka kua chalaya';
+  String _well = 'Solar';
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    for (final c in [_oneMinutes, _solar, _diesel, _exchange, _cash, _paid, _note]) { c.dispose(); }
+    super.dispose();
+  }
+
+  Future<void> _pickPerson() async {
+    try {
+      final p = await ContactPickerService.pickPhoneContact();
+      if (p != null && mounted) setState(() => _person = (p['name'] ?? '').toString());
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Contact select nahi hua: $e')));
+    }
+  }
+
+  Map<String, int> get _minutes {
+    if (_well == 'Solar') return {'Solar': int.tryParse(_oneMinutes.text) ?? 0};
+    if (_well == 'Diesel') return {'Diesel': int.tryParse(_oneMinutes.text) ?? 0};
+    if (_well == 'Both same') {
+      final m = int.tryParse(_oneMinutes.text) ?? 0;
+      return {'Solar': m, 'Diesel': m};
+    }
+    return {'Solar': int.tryParse(_solar.text) ?? 0, 'Diesel': int.tryParse(_diesel.text) ?? 0};
+  }
+
+  Future<void> _save() async {
+    final mins = _minutes;
+    if (mins.values.any((m) => m <= 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kua ke minutes sahi bharein')));
+      return;
+    }
+    final cash = double.tryParse(_cash.text) ?? 0;
+    final paid = double.tryParse(_paid.text) ?? 0;
+    if (cash < 0 || paid < 0 || paid > cash) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cash aur paid amount sahi bharein')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final now = DateTime.now();
+      await _storage.addRecord('khet', {
+        'id': now.microsecondsSinceEpoch.toString(),
+        'type': 'KUA',
+        'contact': _person.trim().isEmpty ? 'Samne wala' : _person.trim(),
+        'direction': _direction,
+        'wellSelection': _well,
+        'wellMinutes': mins,
+        'exchangeMinutes': int.tryParse(_exchange.text) ?? 0,
+        'cashAmount': cash,
+        'cashPaid': paid,
+        'cashBalance': cash - paid,
+        'note': _note.text.trim(),
+        'date': now.toIso8601String(),
+      });
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Save error: $e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Kua Hisab')),
+    body: ListView(padding: const EdgeInsets.all(16), children: [
+      OutlinedButton.icon(onPressed: _pickPerson, icon: const Icon(Icons.contacts_outlined),
+        label: Text(_person.isEmpty ? 'Kis vyakti ke saath hisab?' : _person)),
+      const SizedBox(height: 12),
+      DropdownButtonFormField<String>(
+        value: _direction,
+        decoration: const InputDecoration(labelText: 'Kis taraf ka kua chala?'),
+        items: const [
+          DropdownMenuItem(value: 'Humne dusre ka kua chalaya', child: Text('Humne dusre ka kua chalaya')),
+          DropdownMenuItem(value: 'Dusre ne hamara kua chalaya', child: Text('Dusre ne hamara kua chalaya')),
+        ],
+        onChanged: (v) => setState(() => _direction = v ?? _direction),
+      ),
+      const SizedBox(height: 12),
+      DropdownButtonFormField<String>(
+        value: _well,
+        decoration: const InputDecoration(labelText: 'Kaunsa kua?'),
+        items: const [
+          DropdownMenuItem(value: 'Solar', child: Text('☀️ Solar wala')),
+          DropdownMenuItem(value: 'Diesel', child: Text('⛽ Diesel wala')),
+          DropdownMenuItem(value: 'Both same', child: Text('🔄 Dono — barabar minutes')),
+          DropdownMenuItem(value: 'Both different', child: Text('🔄 Dono — alag minutes')),
+        ],
+        onChanged: (v) => setState(() => _well = v ?? _well),
+      ),
+      const SizedBox(height: 12),
+      if (_well == 'Both different') ...[
+        TextField(controller: _solar, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Solar minutes')),
+        const SizedBox(height: 8),
+        TextField(controller: _diesel, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Diesel minutes')),
+      ] else
+        TextField(controller: _oneMinutes, keyboardType: TextInputType.number,
+          decoration: InputDecoration(labelText: _well == 'Both same' ? 'Dono ke minutes (ek baar)' : 'Minutes')),
+      const SizedBox(height: 12),
+      TextField(controller: _exchange, keyboardType: TextInputType.number,
+        decoration: const InputDecoration(labelText: 'Badle mein pani ke minutes (optional)')),
+      const SizedBox(height: 12),
+      TextField(controller: _cash, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: const InputDecoration(labelText: 'Cash/rent ka total (₹)')),
+      const SizedBox(height: 12),
+      TextField(controller: _paid, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: const InputDecoration(labelText: 'Cash payment (₹)')),
+      const SizedBox(height: 12),
+      TextField(controller: _note, decoration: const InputDecoration(labelText: 'Note (optional)')),
+      const SizedBox(height: 20),
+      FilledButton(onPressed: _saving ? null : _save, child: Text(_saving ? 'Saving…' : 'Save Kua Hisab')),
+    ]),
+  );
 }
 
 class AddTractorWorkScreen extends StatefulWidget {
