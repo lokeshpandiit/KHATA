@@ -583,17 +583,44 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     if (notificationId is num) {
       await FarmReminderService.cancel(notificationId.toInt());
     }
-    await widget.storage.deleteRecord('plans', plan['id'].toString());
+    if (plan['_source'] == 'khet-reminder') {
+      final sourceId = plan['sourceRecordId']?.toString();
+      final matches = widget.storage
+          .records('khet')
+          .where((row) => row['id']?.toString() == sourceId);
+      if (matches.isNotEmpty) {
+        final updated = Map<String, dynamic>.from(matches.first)
+          ..['reminderDate'] = null
+          ..['reminderId'] = null;
+        await widget.storage.updateRecord('khet', sourceId!, updated);
+      }
+    } else {
+      await widget.storage.deleteRecord('plans', plan['id'].toString());
+    }
     if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    final plans = widget.storage
-        .records('plans')
-        .where((plan) => plan['done'] != true)
-        .toList()
-      ..sort((a, b) {
+    final now = DateTime.now();
+    final plans = <Map<String, dynamic>>[
+      ...widget.storage
+          .records('plans')
+          .where((plan) => plan['done'] != true),
+      ...widget.storage.records('khet').where((row) {
+        final reminderAt =
+            DateTime.tryParse(row['reminderDate']?.toString() ?? '');
+        return reminderAt != null && reminderAt.isAfter(now);
+      }).map((row) => <String, dynamic>{
+            'id': 'khet-reminder-${row['id']}',
+            'sourceRecordId': row['id'],
+            '_source': 'khet-reminder',
+            'notificationId': row['reminderId'],
+            'title': row['title'] ?? 'Farm reminder',
+            'note': row['purpose'] ?? row['note'] ?? '',
+            'date': row['reminderDate'],
+          }),
+    ]..sort((a, b) {
         final dateA =
             DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(9999);
         final dateB =
