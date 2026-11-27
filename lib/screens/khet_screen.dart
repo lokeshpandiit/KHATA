@@ -1541,7 +1541,15 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
                 child: ListTile(
                   leading: const Icon(Icons.grass_outlined),
                   title: const Text('Is kille mein abhi kaunsi fasal hai?'),
-                  subtitle: Text(_currentCropName()),
+                  subtitle: Text(
+                    _selectedPlots.keys.map((id) {
+                      final plot = _storage.records('plots').firstWhere((p) => p['id'] == id);
+                      final crop = _currentCropFor(id);
+                      final cropName = crop == null ? 'Fasal record nahi hai' :
+                          (crop['cropName'] ?? crop['title'] ?? 'Fasal').toString();
+                      return '${plotLabel(plot)}: $cropName';
+                    }).join('\\n'),
+                  ),
                 ),
               ),
             if (widget.type == 'HARA_BEEJ') ...[
