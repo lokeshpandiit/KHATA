@@ -77,8 +77,25 @@ class DashboardScreen extends StatelessWidget {
     }
     for (final row in khet) {
       final type = row['type'] == 'PANI' ? 'PANI' : (row['type'] == 'TRACTOR' ? 'TRACTOR' : 'KHET');
-      recent.add(_Recent(type, (row['title'] ?? row['contact'] ?? row['customerName'] ?? row['type'] ?? 'Khet').toString(),
-        _amount(row['price'] ?? row['totalAmount']), _date(row), null));
+      recent.add(_Recent(
+        type,
+        row['type'] == 'PANI'
+            ? 'Pani · ${row['plotId'] == null ? 'Khet' : row['plotId']}'
+            : (row['title'] ?? row['contact'] ?? row['customerName'] ?? row['type'] ?? 'Khet').toString(),
+        _amount(row['price'] ?? row['totalAmount']),
+        _date(row),
+        null,
+        row['type'] == 'PANI'
+            ? [
+                if ((row['direction'] ?? '').toString().isNotEmpty) 'Len-den: ${row['direction']}',
+                if ((row['source'] ?? '').toString().isNotEmpty) 'Source: ${row['source']}',
+                if (row['contact'] != null) 'Contact: ${row['contact']}',
+                if ((row['minutes'] as num?)?.toInt() != null) 'Time: ${row['minutes']} min',
+                if (row['wetKyaris'] != null) 'Kyari: ${row['wetKyaris']} bheegi',
+                if (row['season'] != null || row['year'] != null) 'Season: ${row['season'] ?? ''} ${row['year'] ?? ''}',
+              ].join(' · ')
+            : null,
+      ));
     }
     recent.sort((a, b) => (b.date ?? DateTime(0)).compareTo(a.date ?? DateTime(0)));
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
@@ -154,7 +171,7 @@ class DashboardScreen extends StatelessWidget {
           child: ListTile(
             leading: CircleAvatar(child: Icon(item.type == 'HISAB' ? Icons.receipt_long : item.type == 'PANI' ? Icons.water_drop : Icons.agriculture)),
             title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text('${item.type} · ${item.date == null ? 'Date unavailable' : DateFormat('dd MMM, hh:mm a').format(item.date!)}'),
+            subtitle: Text('${item.type} · ${item.date == null ? 'Date unavailable' : DateFormat('dd MMM, hh:mm a').format(item.date!)}${item.details == null || item.details!.isEmpty ? '' : '\\n${item.details}'}'),
             trailing: item.amount > 0
                 ? Text('${item.direction == 'PAID' ? '−' : '+'}${money.format(item.amount)}',
                     style: TextStyle(color: item.direction == 'PAID' ? Colors.red : Colors.green, fontWeight: FontWeight.w700))
@@ -168,11 +185,11 @@ class DashboardScreen extends StatelessWidget {
 }
 
 class _Recent {
-  _Recent(this.type, this.title, this.amount, this.date, this.direction);
+  _Recent(this.type, this.title, this.amount, this.date, this.direction, [this.details]);
   final String type, title;
   final double amount;
   final DateTime? date;
-  final String? direction;
+  final String? direction;\n  final String? details;
 }
 
 class _MetricCard extends StatelessWidget {
