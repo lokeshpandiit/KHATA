@@ -825,6 +825,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   final _note = TextEditingController();
   String? _contactId;
   String? _plotId;
+  Map<String, int> _selectedPlots = {};
   String _source = 'Tubewell';
   String _wellType = 'Solar';
   bool _borrowedWater = false;
@@ -849,6 +850,12 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   void initState() {
     super.initState();
     _plotId = widget.initialPlotId;
+    if (widget.initialPlotId != null) {
+      final plots = _storage.records('plots').where((p) => p['id'] == widget.initialPlotId);
+      if (plots.isNotEmpty) {
+        _selectedPlots[widget.initialPlotId!] = (plots.first['totalKyaris'] as num?)?.toInt() ?? 0;
+      }
+    }
     if (_contacts.isNotEmpty) _contactId = _contacts.first['id'] as String;
     _loadDefaultOwnDuration();
   }
@@ -930,18 +937,25 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
       _error('पहले व्यक्ति का संपर्क चुनें');
       return;
     }
+    final selectedPlotEntries = _selectedPlots.entries.toList();
+    var totalSelectedKyaris = 0;
     if (plotMode) {
-      if (_plotId == null || _selectedPlot == null) {
-        _error('Select your killa for this water entry');
+      if (selectedPlotEntries.isEmpty) {
+        _error('Kam se kam ek killa select karein');
         return;
       }
-      if (_totalKyaris <= 0) {
-        _error('Map Edit mein pehle is kille ki total kyari set karein');
-        return;
-      }
-      if (_wetCount <= 0 || _wetCount > _totalKyaris) {
-        _error('Bheegi kyari 1 se ' + _totalKyaris.toString() + ' ke beech honi chahiye');
-        return;
+      for (final entry in selectedPlotEntries) {
+        final matches = _storage.records('plots').where((plot) => plot['id'] == entry.key);
+        if (matches.isEmpty) {
+          _error('Selected killa nahi mila. Dobara select karein.');
+          return;
+        }
+        final total = (matches.first['totalKyaris'] as num?)?.toInt() ?? 0;
+        if (total <= 0 || entry.value <= 0 || entry.value > total) {
+          _error('Har selected kille ki total kyari Map Edit mein set karein aur valid kyari count chunein.');
+          return;
+        }
+        totalSelectedKyaris += entry.value;
       }
       if (_borrowedWater && borrowedMinutes <= 0) {
         _error('Extra pani ke minutes enter karein');
@@ -966,9 +980,10 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         now.hour,
         now.minute,
       );
-
-      final record = <String, dynamic>{
-        'id': now.microsecondsSinceEpoch.toString(),
+      final batchId = now.microsecondsSinceEpoch.toString();
+      final baseRecord = <String, dynamic>{
+        'id': batchId,
+        'batchId': batchId,
         'type': 'PANI',
         'contactId': _contactId,
         'contact': contact?['name'],
@@ -982,28 +997,52 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
       };
 
       if (plotMode) {
-        record.addAll({
-          'plotId': _plotId,
-          'source': _source,
-          'ownMinutes': ownMinutes,
-          'borrowedMinutes': _borrowedWater ? borrowedMinutes : 0,
-          'borrowedWater': _borrowedWater,
-          'borrowedContact': (_borrowedWater && contact != null) ? contact['name'] : null,
-          'borrowedContactId': _borrowedWater ? _contactId : null,
-          'wetKyaris': _wetCount,
-          'totalKyarisSnapshot': _totalKyaris,
-          'remainingKyaris': _remainingKyaris,
-          'season': _season,
-          'year': _year,
-        });
+        final allPlotIds = selectedPlotEntries.map((entry) => entry.key).toList();
+        var allocatedOwnMinutes = 0;
+        var allocatedBorrowedMinutes = 0;
+        for (var index = 0; index < selectedPlotEntries.length; index++) {
+          final entry = selectedPlotEntries[index];
+          final plotMatches = _storage.records('plots').where((plot) => plot['id'] == entry.key).toList();
+          final totalKyaris = (plotMatches.first['totalKyaris'] as num?)?.toInt() ?? 0;
+          final isLast = index == selectedPlotEntries.length - 1;
+          final plotOwnMinutes = isLast
+              ? ownMinutes - allocatedOwnMinutes
+              : (ownMinutes * entry.value ~/ totalSelectedKyaris);
+          final plotBorrowedMinutes = _borrowedWater
+              ? (isLast
+                  ? borrowedMinutes - allocatedBorrowedMinutes
+                  : (borrowedMinutes * entry.value ~/ totalSelectedKyaris))
+              : 0;
+          allocatedOwnMinutes += plotOwnMinutes;
+          allocatedBorrowedMinutes += plotBorrowedMinutes;
+          final plotRecord = Map<String, dynamic>.from(baseRecord)
+            ..['id'] = (int.parse(batchId) + index).toString()
+            ..['plotId'] = entry.key
+            ..['plotIds'] = allPlotIds
+            ..['selectedPlotCount'] = selectedPlotEntries.length
+            ..['source'] = _source
+            ..['ownMinutes'] = plotOwnMinutes
+            ..['borrowedMinutes'] = plotBorrowedMinutes
+            ..['borrowedWater'] = _borrowedWater
+            ..['borrowedContact'] = (_borrowedWater && contact != null) ? contact['name'] : null
+            ..['borrowedContactId'] = _borrowedWater ? _contactId : null
+            ..['minutes'] = plotOwnMinutes + plotBorrowedMinutes
+            ..['wetKyaris'] = entry.value
+            ..['kyariCount'] = entry.value
+            ..['totalKyarisSnapshot'] = totalKyaris
+            ..['remainingKyaris'] = (totalKyaris - entry.value).clamp(0, totalKyaris)
+            ..['fullKilla'] = entry.value == totalKyaris
+            ..['season'] = _season
+            ..['year'] = _year;
+          await _storage.addRecord('khet', plotRecord);
+        }
       } else {
-        record.addAll({
+        baseRecord.addAll({
           'ledgerMode': 'PERSON',
           'wellType': _wellType,
         });
+        await _storage.addRecord('khet', baseRecord);
       }
-
-      await _storage.addRecord('khet', record);
       if (mounted) Navigator.pop(context);
     } catch (error) {
       _error('Could not save Pani hisab: ' + error.toString());
