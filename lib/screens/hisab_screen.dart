@@ -54,8 +54,7 @@ class _HisabScreenState extends State<HisabScreen> {
     final query = _search.text.trim().toLowerCase();
     return _rows.where((row) {
       final date = DateTime.tryParse(row['date'] as String? ?? '');
-      final knownCategories = ['Khet', 'Studio', 'Len-Den'];
-      final categoryMatch = _category == 'All' || (_category == 'Other' ? !(knownCategories.contains(row['category']) || row['category'] == 'Other') : row['category'] == _category);
+      final categoryMatch = _category == 'All' || row['category'] == _category;
       final monthMatch = _month == 'All months' ||
           (date != null && monthKey(date) == _month);
       final searchable =
@@ -117,6 +116,12 @@ class _HisabScreenState extends State<HisabScreen> {
   Widget build(BuildContext context) {
     final rows = _filtered;
     final months = availableMonths(_rows);
+    final customCategories = _rows
+        .map((row) => (row['category'] ?? '').toString().trim())
+        .where((category) => category.isNotEmpty && !const ['Khet', 'Studio', 'Len-Den', 'Other'].contains(category))
+        .toSet()
+        .toList()..sort();
+    final categoryOptions = ['All', 'Khet', 'Studio', 'Len-Den', 'Other', ...customCategories];
     if (!months.contains(_month)) _month = 'All months';
     return Scaffold(
       body: Column(
@@ -134,7 +139,7 @@ class _HisabScreenState extends State<HisabScreen> {
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: ['All', 'Khet', 'Studio', 'Len-Den', 'Other']
+                    children: categoryOptions
                         .map((item) => Padding(
                               padding: const EdgeInsets.only(right: 8),
                               child: ChoiceChip(
@@ -350,12 +355,18 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
+    final savedCategory = _category == 'Custom' ? _customCategory.text.trim() : _category.trim();
+    if (savedCategory.isEmpty) {
+      _error('Category ka naam likhein');
+      return;
+    }
     setState(() => _saving = true);
     try {
       final now = DateTime.now();
       await _storage.addRecord('hisabs', {
         'id': now.microsecondsSinceEpoch.toString(),
-        'category': _category == 'Custom' ? _customCategory.text.trim() : _category,
+        'category': savedCategory,
         'title': _title.text.trim(),
         'amount': _amount.text.trim(),
         'direction': _direction,
@@ -380,6 +391,10 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
   Widget build(BuildContext context) {
     final effectiveCategory = _category == 'Custom' ? _customCategory.text.trim() : _category;
     final showPerson = effectiveCategory == 'Len-Den' || effectiveCategory == 'Studio';
+    final formCategories = <String>['Khet', 'Studio', 'Len-Den', 'Other', 'Custom'];
+    if (!formCategories.contains(widget.initialCategory)) {
+      formCategories.insert(formCategories.length - 1, widget.initialCategory);
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Add New Hisab')),
       body: ListView(
@@ -388,13 +403,14 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
           DropdownButtonFormField<String>(
             initialValue: _category,
             decoration: const InputDecoration(labelText: 'Category'),
-            items: ['Khet', 'Studio', 'Len-Den', 'Other', 'Custom']
+            items: formCategories
                 .map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
             onChanged: (value) => setState(() => _category = value ?? _category),
           ),
           if (_category == 'Custom') ...[
             const SizedBox(height: 10),
             TextField(controller: _customCategory, textCapitalization: TextCapitalization.words,
+              onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(labelText: 'Apni category ka naam likhein', hintText: 'Jaise: Ghar, Personal, Repair, Udhaar')),
           ],
           const SizedBox(height: 12),
