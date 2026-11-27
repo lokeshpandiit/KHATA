@@ -60,7 +60,7 @@ class DashboardScreen extends StatelessWidget {
     final monthKhetAmount = khet.where(thisMonth)
         .where((row) => row['type'] != 'PANI' && row['type'] != 'TRACTOR')
         .fold<double>(0, (sum, row) => sum + _amount(row['price']));
-    final monthTractorAmount = khet.where(thisMonth && (Map<String, dynamic> row) => row['type'] == 'TRACTOR')
+    final monthTractorAmount = khet.where((row) => thisMonth(row) && row['type'] == 'TRACTOR')
         .fold<double>(0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['price']));
     final monthPani = khet.where(thisMonth).where((row) => row['type'] == 'PANI')
         .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? int.tryParse('${row['minutes']}') ?? 0));
