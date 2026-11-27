@@ -35,6 +35,26 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
     return result;
   }
 
+  Future<void> _markHarvested(Map<String, dynamic> crop) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(now.year - 8),
+      lastDate: DateTime(now.year + 8),
+    );
+    if (picked == null || !mounted) return;
+    final updated = Map<String, dynamic>.from(crop)
+      ..['harvested'] = true
+      ..['harvestDate'] = DateTime(picked.year, picked.month, picked.day).toIso8601String()
+      ..['harvestedAt'] = DateTime.now().toIso8601String();
+    await StorageBackupService.instance.updateRecord('khet', crop['id'].toString(), updated);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fasal katne ka record save ho gaya. Ab nayi fasal add kar sakte hain.')));
+      setState(() {});
+    }
+  }
+
   String _seasonYear(Map<String, dynamic> row) {
     final season = (row['season'] ?? '').toString();
     final year = row['year'];
@@ -106,7 +126,7 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
             ? totalKyaris
             : ((latestPani['remainingKyaris'] as num?)?.toInt() ?? (totalKyaris - wetKyaris).clamp(0, totalKyaris));
         final totalMinutes = pani.fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
-        final cropName = (latestCrop?['cropName'] ?? latestCrop?['title'] ?? 'Fasal record nahi hai').toString();
+        final cropName = latestCrop == null ? 'Fasal record nahi hai' : (latestCrop['cropName'] ?? latestCrop['title'] ?? 'Fasal').toString() + (latestCrop['harvested'] == true ? ' (Kat chuki)' : '');
 
         return SafeArea(
           child: Padding(
