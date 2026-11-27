@@ -148,7 +148,7 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
               final height = constraints.maxHeight;
               const left = 0.1268, top = 0.1615, cellWidth = 0.1683, cellHeight = 0.1497;
               // Square viewport crops the unused side margins; adjust overlay coordinates to the cropped image.
-              const cropLeft = 0.125, cropWidth = 0.75;
+              const cropLeft = 0.13, cropWidth = 0.68;
               final croppedLeft = (left - cropLeft) / cropWidth;
               final croppedCellWidth = cellWidth / cropWidth;
               return ClipRRect(
