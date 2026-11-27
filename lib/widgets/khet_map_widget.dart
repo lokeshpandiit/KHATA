@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/storage_backup_service.dart';
 import 'plot_selector.dart';
+import 'plot_details_sheet.dart';
 
 class KhetMapWidget extends StatefulWidget {
   const KhetMapWidget({super.key});
@@ -16,6 +17,7 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
   Future<void> _editPlot(Map<String, dynamic> plot) async {
     final numberController = TextEditingController(text: plot['number'] as String? ?? '');
     final nameController = TextEditingController(text: plot['name'] as String? ?? '');
+    final totalKyarisController = TextEditingController(text: (plot['totalKyaris'] as num?)?.toInt().toString() ?? '');
     var isMine = plot['isMine'] as bool? ?? false;
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -31,6 +33,12 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
               const SizedBox(height: 12),
               TextField(controller: nameController, textCapitalization: TextCapitalization.words,
                 decoration: const InputDecoration(labelText: 'Khet name / pehchan', hintText: 'Kuan wala kila, Kothe wala kila')),
+              const SizedBox(height: 12),
+              TextField(
+                controller: totalKyarisController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Is kille mein total kitni kyari hain?'),
+              ),
               const SizedBox(height: 8),
               CheckboxListTile(
                 contentPadding: EdgeInsets.zero,
@@ -47,6 +55,7 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
               'number': numberController.text.trim(),
               'name': nameController.text.trim(),
               'isMine': isMine,
+              'totalKyaris': int.tryParse(totalKyarisController.text.trim()) ?? 0,
             }), child: const Text('Save')),
           ],
         ),
@@ -54,6 +63,7 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
     );
     numberController.dispose();
     nameController.dispose();
+    totalKyarisController.dispose();
     if (result == null || !mounted) return;
     setState(() => _saving = true);
     try {
@@ -69,6 +79,19 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _openPlotDetails(Map<String, dynamic> plot) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => FractionallySizedBox(
+        heightFactor: 0.92,
+        child: KhetPlotDetailsSheet(plot: plot),
+      ),
+    );
+    if (mounted) setState(() {});
   }
 
   Widget _plotBadge(Map<String, dynamic> plot, double cellWidth) {
@@ -141,7 +164,7 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: _editing ? () => _editPlot(plot) : null,
+                          onTap: _editing ? () => _editPlot(plot) : () => _openPlotDetails(plot),
                           child: Center(child: _plotBadge(plot, width * cellWidth)),
                         ),
                       ),

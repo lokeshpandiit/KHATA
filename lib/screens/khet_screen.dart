@@ -10,6 +10,9 @@ import '../services/khata_sharing_service.dart';
 import '../services/storage_backup_service.dart';
 import '../widgets/khata_widgets.dart';
 import '../widgets/plot_selector.dart';
+import '../widgets/farm_fields.dart';
+import '../services/farm_reminder_service.dart';
+import '../widgets/farm_fields.dart';
 
 class KhetScreen extends StatefulWidget {
   const KhetScreen({super.key});
@@ -23,6 +26,8 @@ class _KhetScreenState extends State<KhetScreen> {
   final _search = TextEditingController();
   String _tab = 'ALL';
   String _month = 'All months';
+  String _seasonFilter = 'All seasons';
+  int? _yearFilter;
 
   @override
   void dispose() {
@@ -57,10 +62,12 @@ class _KhetScreenState extends State<KhetScreen> {
           (_tab == 'PENDING' ? isPending : category == _tab);
       final monthMatch = _month == 'All months' ||
           (date != null && monthKey(date) == _month);
+      final seasonMatch = _seasonFilter == 'All seasons' || row['season'] == _seasonFilter;
+      final yearMatch = _yearFilter == null || row['year'] == _yearFilter;
       final searchable =
-          '${row['title'] ?? ''} ${row['note'] ?? ''} ${row['contact'] ?? ''} ${row['source'] ?? ''} ${row['customerName'] ?? ''} ${row['farmName'] ?? ''} ${row['work'] ?? ''}'
+          '${row['title'] ?? ''} ${row['note'] ?? ''} ${row['contact'] ?? ''} ${row['source'] ?? ''} ${row['customerName'] ?? ''} ${row['farmName'] ?? ''} ${row['work'] ?? ''} ${row['cropName'] ?? ''} ${row['seedName'] ?? ''} ${row['purpose'] ?? ''}'
               .toLowerCase();
-      return typeMatch && monthMatch && searchable.contains(query);
+      return typeMatch && monthMatch && seasonMatch && yearMatch && searchable.contains(query);
     }).toList()
       ..sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
   }
@@ -95,7 +102,7 @@ class _KhetScreenState extends State<KhetScreen> {
       context: context,
       builder: (context) => SafeArea(
         child: Wrap(
-          children: ['DAWAI', 'FASAL', 'PANI', 'TRACTOR', 'OTHER']
+          children: ['DAWAI', 'FASAL', 'HARA_BEEJ', 'PANI', 'TRACTOR', 'OTHER']
               .map((item) => ListTile(
                     leading: Icon(item == 'TRACTOR' ? Icons.agriculture : Icons.add_circle_outline),
                     title: Text(item),
@@ -187,6 +194,8 @@ class _KhetScreenState extends State<KhetScreen> {
         'Source: ${row['source']}',
         'Kaam: ${row['direction']} / ${formatMinutes((row['minutes'] as num?)?.toInt() ?? 0)}',
         if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty) 'Killa: ${_plotLabel(row['plotId'])}',
+        if (row['wetKyaris'] != null) 'Kyari: ${row['wetKyaris']} bheegi, ${row['remainingKyaris']} baaki',
+        if (row['season'] != null || row['year'] != null) 'Season: ${row['season'] ?? ''} ${row['year'] ?? ''}',
         if (date != null) 'Date: ${dateLabel(date)}',
         if (includeNote && note.isNotEmpty) 'Note: $note',
       ].join('\n'),
@@ -202,6 +211,10 @@ class _KhetScreenState extends State<KhetScreen> {
         'Khet Hisab - ${_storage.senderName}',
         'Type: ${row['type']}',
         if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty) 'Killa: ${_plotLabel(row['plotId'])}',
+        if (row['season'] != null || row['year'] != null) 'Season: ${row['season'] ?? ''} ${row['year'] ?? ''}',
+        if (row['purpose'] != null) 'Dawai type: ${row['purpose']}',
+        if (row['cropAtUse'] != null) 'Current crop: ${row['cropAtUse']}',
+        if (row['kyariNumber'] != null) 'Kyari: ${row['kyariNumber']}',
         if ((row['title'] as String? ?? '').isNotEmpty) 'Name: ${row['title']}',
         if ((row['price'] as String? ?? '').isNotEmpty) 'Price: ₹${row['price']}',
         if ((row['note'] as String? ?? '').isNotEmpty) 'Note: ${row['note']}',
@@ -318,6 +331,7 @@ class _KhetScreenState extends State<KhetScreen> {
     final addLabel = switch (_tab) {
       'DAWAI' => 'Add Dawai',
       'FASAL' => 'Add Fasal',
+      'HARA_BEEJ' => 'Add Hara Beej',
       'PANI' => 'Add Pani',
       'TRACTOR' || 'PENDING' => 'Add Tractor',
       'OTHER' => 'Add Other',
@@ -335,6 +349,32 @@ class _KhetScreenState extends State<KhetScreen> {
                 monthFilter(_month, months, (value) {
                   if (value != null) setState(() => _month = value);
                 }),
+                const SizedBox(height: 8),
+                Row(children: [
+                  Expanded(child: DropdownButtonFormField<String>(
+                    initialValue: _seasonFilter,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Season', isDense: true),
+                    items: const [
+                      DropdownMenuItem(value: 'All seasons', child: Text('All seasons')),
+                      DropdownMenuItem(value: 'Rabi', child: Text('Rabi')),
+                      DropdownMenuItem(value: 'Kharif', child: Text('Kharif')),
+                    ],
+                    onChanged: (value) => setState(() => _seasonFilter = value ?? 'All seasons'),
+                  )),
+                  const SizedBox(width: 8),
+                  Expanded(child: DropdownButtonFormField<int?>(
+                    initialValue: _yearFilter,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Year', isDense: true),
+                    items: [
+                      const DropdownMenuItem<int?>(value: null, child: Text('All years')),
+                      ...List.generate(9, (i) => DateTime.now().year - 3 + i)
+                        .map((year) => DropdownMenuItem<int?>(value: year, child: Text(year.toString()))),
+                    ],
+                    onChanged: (value) => setState(() => _yearFilter = value),
+                  )),
+                ]),
                 const SizedBox(height: 10),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -432,6 +472,8 @@ class _KhetScreenState extends State<KhetScreen> {
           ].where((part) => part.isNotEmpty).join(' · ')),
           subtitle: Text(
             '${formatMinutes((row['minutes'] as num?)?.toInt() ?? 0)}'
+            '${row['wetKyaris'] == null ? '' : '\nBheegi: ${row['wetKyaris']} / ${row['totalKyarisSnapshot'] ?? '-'} · Baaki: ${row['remainingKyaris'] ?? '-'}'}'
+            '${row['season'] == null ? '' : '\n${row['season']} ${row['year'] ?? ''}'}'
             '${(row['note'] as String? ?? '').isNotEmpty ? '\n${row['note']}' : ''}'
             '${date == null ? '' : '\n${timeLabel(date)}'}',
           ),
@@ -525,7 +567,19 @@ class _KhetScreenState extends State<KhetScreen> {
                       style: const TextStyle(fontWeight: FontWeight.w700)),
                   if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty)
                     Text(_plotLabel(row['plotId']), style: const TextStyle(color: Colors.black54, fontSize: 12)),
-                  if ((row['price'] as String? ?? '').isNotEmpty) Text('₹${row['price']}'),
+                  if ((row['price'] ?? '').toString().isNotEmpty && row['price'] != 0) Text('₹${row['price']}'),
+                  if (row['season'] != null || row['year'] != null)
+                    Text('Season: ${row['season'] ?? ''} ${row['year'] ?? ''}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                  if (row['type'] == 'FASAL' && row['sowingDate'] != null)
+                    Text('Beejne ki date: ${dateLabel(DateTime.parse(row['sowingDate'] as String))}'),
+                  if (row['type'] == 'HARA_BEEJ')
+                    Text('Kyari: ${row['kyariNumber'] ?? '-'}'),
+                  if (row['type'] == 'DAWAI') ...[
+                    Text('Dawai: ${row['purpose'] ?? '-'}'),
+                    Text('Us waqt fasal: ${row['cropAtUse'] ?? 'Not recorded'}'),
+                    if (row['reminderDate'] is String)
+                      Text('Reminder: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(row['reminderDate'] as String))}', style: const TextStyle(color: Colors.deepOrange)),
+                  ],
                   if ((row['note'] as String? ?? '').isNotEmpty) Text(row['note'] as String),
                   if (date != null)
                     Text('${timeLabel(date)} · ${row['type']}',
@@ -574,7 +628,8 @@ String formatSignedMinutes(int minutes) {
 }
 
 class AddPaniScreen extends StatefulWidget {
-  const AddPaniScreen({super.key});
+  const AddPaniScreen({this.initialPlotId, super.key});
+  final String? initialPlotId;
 
   @override
   State<AddPaniScreen> createState() => _AddPaniScreenState();
@@ -583,24 +638,39 @@ class AddPaniScreen extends StatefulWidget {
 class _AddPaniScreenState extends State<AddPaniScreen> {
   final _storage = StorageBackupService.instance;
   final _minutes = TextEditingController();
+  final _wetKyaris = TextEditingController();
   final _note = TextEditingController();
   String? _contactId;
+  String? _plotId;
   String _source = 'Tubewell';
   String _direction = 'Diya';
-  String? _plotId;
+  String _season = 'Rabi';
+  int _year = DateTime.now().year;
+  DateTime _activityDate = DateTime.now();
   bool _saving = false;
 
   List<Map<String, dynamic>> get _contacts => _storage.records('contacts');
 
+  Map<String, dynamic>? get _selectedPlot {
+    final matches = _storage.records('plots').where((item) => item['id'] == _plotId);
+    return matches.isEmpty ? null : matches.first;
+  }
+
+  int get _totalKyaris => (_selectedPlot?['totalKyaris'] as num?)?.toInt() ?? 0;
+  int get _wetCount => int.tryParse(_wetKyaris.text.trim()) ?? 0;
+  int get _remainingKyaris => (_totalKyaris - _wetCount).clamp(0, _totalKyaris);
+
   @override
   void initState() {
     super.initState();
+    _plotId = widget.initialPlotId;
     if (_contacts.isNotEmpty) _contactId = _contacts.first['id'] as String;
   }
 
   @override
   void dispose() {
     _minutes.dispose();
+    _wetKyaris.dispose();
     _note.dispose();
     super.dispose();
   }
@@ -624,8 +694,19 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         if (mounted) setState(() => _contactId = id);
       }
     } catch (error) {
-      _error('Could not select phone contact: $error');
+      _error('Could not select phone contact: ' + error.toString());
     }
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _activityDate,
+      firstDate: DateTime(now.year - 8),
+      lastDate: DateTime(now.year + 8),
+    );
+    if (picked != null && mounted) setState(() => _activityDate = picked);
   }
 
   void _error(String message) {
@@ -642,10 +723,27 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
       _error('Pick a phone contact before saving Pani hisab');
       return;
     }
+    if (_plotId == null || _selectedPlot == null) {
+      _error('Select your killa for this water entry');
+      return;
+    }
+    if (_totalKyaris <= 0) {
+      _error('Map Edit mein pehle is kille ki total kyari set karein');
+      return;
+    }
+    if (_wetCount <= 0 || _wetCount > _totalKyaris) {
+      _error('Bheegi kyari 1 se ' + _totalKyaris.toString() + ' ke beech honi chahiye');
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       final now = DateTime.now();
       final contact = _contacts.firstWhere((item) => item['id'] == _contactId);
+      final entryDate = DateTime(
+        _activityDate.year, _activityDate.month, _activityDate.day,
+        now.hour, now.minute,
+      );
       await _storage.addRecord('khet', {
         'id': now.microsecondsSinceEpoch.toString(),
         'type': 'PANI',
@@ -656,12 +754,17 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         'source': _source,
         'direction': _direction,
         'minutes': minutes,
+        'wetKyaris': _wetCount,
+        'totalKyarisSnapshot': _totalKyaris,
+        'remainingKyaris': _remainingKyaris,
+        'season': _season,
+        'year': _year,
         'note': _note.text.trim(),
-        'date': now.toIso8601String(),
+        'date': entryDate.toIso8601String(),
       });
       if (mounted) Navigator.pop(context);
     } catch (error) {
-      _error('Could not save Pani hisab: $error');
+      _error('Could not save Pani hisab: ' + error.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -679,7 +782,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
           OutlinedButton.icon(
             onPressed: _pickContact,
             icon: const Icon(Icons.contacts_outlined),
-            label: Text(selected.isEmpty ? 'Pick from Phone Contacts' : '${selected.first['name']} · ${selected.first['phone'] ?? ''}'),
+            label: Text(selected.isEmpty ? 'Pick from Phone Contacts' : selected.first['name'].toString() + ' · ' + (selected.first['phone'] ?? '').toString()),
           ),
           const SizedBox(height: 12),
           if (contacts.isNotEmpty)
@@ -688,12 +791,56 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
               decoration: const InputDecoration(labelText: 'Saved contact'),
               items: contacts.map((item) => DropdownMenuItem(
                 value: item['id'] as String,
-                child: Text('${item['name']} ${item['phone'] == null ? '' : '· ${item['phone']}'}'),
+                child: Text(item['name'].toString() + (item['phone'] == null ? '' : ' · ' + item['phone'].toString())),
               )).toList(),
               onChanged: (value) => setState(() => _contactId = value),
             ),
           const SizedBox(height: 12),
-          KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+          KhetPlotDropdown(selectedId: _plotId, onChanged: (value) {
+            setState(() { _plotId = value; _wetKyaris.clear(); });
+          }),
+          const SizedBox(height: 8),
+          Text(
+            _selectedPlot == null
+                ? 'Killa select karein. Total kyari map ke Edit option mein set hoti hain.'
+                : 'Is kille mein total kyari: ' + _totalKyaris.toString(),
+            style: const TextStyle(color: Colors.black54, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _wetKyaris,
+            keyboardType: TextInputType.number,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Is baar kitni kyari bheegi?',
+              prefixIcon: Icon(Icons.water_drop_outlined),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Expanded(child: Text('Bheegi: ' + _wetCount.toString(), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w700))),
+                  Expanded(child: Text('Baaki: ' + _remainingKyaris.toString(), style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w700))),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SeasonYearFields(
+            season: _season,
+            year: _year,
+            onSeasonChanged: (value) => setState(() => _season = value),
+            onYearChanged: (value) => setState(() => _year = value),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _pickDate,
+            icon: const Icon(Icons.calendar_month_outlined),
+            label: Text('Paani date: ' + DateFormat('dd MMM yyyy').format(_activityDate)),
+          ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
             initialValue: _source,
@@ -713,14 +860,14 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
             controller: _minutes,
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
-              labelText: 'Minutes',
-              helperText: 'Duration: ${formatMinutes(int.tryParse(_minutes.text) ?? 0)}',
+              labelText: 'Paani kitne minute chala?',
+              helperText: 'Duration: ' + formatMinutes(int.tryParse(_minutes.text) ?? 0),
             ),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 12),
           TextField(controller: _note, minLines: 2, maxLines: 4,
-            decoration: const InputDecoration(labelText: 'Note')),
+            decoration: const InputDecoration(labelText: 'Note (jaise: shaam ko uski baari ke baad)')),
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _saving ? null : _save,
@@ -733,8 +880,9 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
 }
 
 class AddKhetItemScreen extends StatefulWidget {
-  const AddKhetItemScreen({required this.type, super.key});
+  const AddKhetItemScreen({required this.type, this.initialPlotId, super.key});
   final String type;
+  final String? initialPlotId;
 
   @override
   State<AddKhetItemScreen> createState() => _AddKhetItemScreenState();
@@ -746,17 +894,75 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   final _title = TextEditingController();
   final _price = TextEditingController();
   final _note = TextEditingController();
+  final _kyariNumber = TextEditingController();
   final List<String> _itemPhotos = [];
   final List<String> _billPhotos = [];
   String? _plotId;
+  String _season = 'Rabi';
+  int _year = DateTime.now().year;
+  String _purpose = 'Herbicide (ghas khatam karne wali)';
+  DateTime _activityDate = DateTime.now();
+  bool _reminderEnabled = false;
+  DateTime? _reminderAt;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _plotId = widget.initialPlotId;
+  }
+
+  bool get _needsFarmDetails => ['FASAL', 'HARA_BEEJ', 'DAWAI'].contains(widget.type);
+  String get _dateLabel => widget.type == 'FASAL' || widget.type == 'HARA_BEEJ'
+      ? 'Beejne ki date' : 'Dawai dalne ki date';
+
+  Map<String, dynamic>? get _currentCrop {
+    if (_plotId == null) return null;
+    final crops = _storage.records('khet')
+        .where((row) => row['type'] == 'FASAL' && row['plotId'] == _plotId)
+        .toList();
+    crops.sort((a, b) =>
+      (DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(0))
+      .compareTo(DateTime.tryParse(a['date'] as String? ?? '') ?? DateTime(0)));
+    return crops.isEmpty ? null : crops.first;
+  }
 
   @override
   void dispose() {
     _title.dispose();
     _price.dispose();
     _note.dispose();
+    _kyariNumber.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickActivityDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _activityDate,
+      firstDate: DateTime(now.year - 8),
+      lastDate: DateTime(now.year + 8),
+    );
+    if (picked != null && mounted) setState(() => _activityDate = picked);
+  }
+
+  Future<void> _pickReminder() async {
+    final now = DateTime.now();
+    final initial = _reminderAt ?? now.add(const Duration(days: 7));
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initial.isBefore(now) ? now : initial,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: DateTime(now.year + 8),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_reminderAt ?? now.add(const Duration(days: 7))),
+    );
+    if (time == null || !mounted) return;
+    setState(() => _reminderAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
   }
 
   Future<void> _pickPhotos(bool bill, ImageSource source) async {
@@ -771,7 +977,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       }
       if (mounted) setState(() {});
     } catch (error) {
-      _error('Could not save photos: $error');
+      _error('Could not save photos: ' + error.toString());
     }
   }
 
@@ -787,7 +993,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       }
       if (mounted) setState(() {});
     } catch (error) {
-      _error('Could not save bill images: $error');
+      _error('Could not save bill images: ' + error.toString());
     }
   }
 
@@ -795,26 +1001,108 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  String _currentCropName() {
+    final crop = _currentCrop;
+    if (crop == null) return 'Is kille ke liye fasal ki entry nahi mili';
+    final cropName = (crop['cropName'] ?? crop['title'] ?? 'Fasal').toString();
+    final season = (crop['season'] ?? '').toString();
+    final year = crop['year']?.toString() ?? '';
+    return cropName + (season.isEmpty ? '' : ' · ' + season) + (year.isEmpty ? '' : ' ' + year);
+  }
+
   Future<void> _save() async {
+    final title = _title.text.trim();
+    final price = double.tryParse(_price.text.trim()) ?? 0;
+    if (title.isEmpty) {
+      _error(widget.type == 'FASAL' ? 'Fasal ka naam likhein' : widget.type == 'DAWAI' ? 'Dawai ka naam likhein' : 'Naam likhein');
+      return;
+    }
+    if (_needsFarmDetails && (_plotId == null || _plotId!.isEmpty)) {
+      _error('Apna killa select karein');
+      return;
+    }
+    if (widget.type == 'HARA_BEEJ' && _kyariNumber.text.trim().isEmpty) {
+      _error('Hara beej wali kyari ka number/name likhein');
+      return;
+    }
+    if (widget.type == 'DAWAI' && _reminderEnabled && _reminderAt == null) {
+      _error('Reminder ke liye date aur time set karein');
+      return;
+    }
+    if (widget.type == 'DAWAI' && _reminderEnabled && !_reminderAt!.isAfter(DateTime.now())) {
+      _error('Reminder future date/time par set karein');
+      return;
+    }
+
     setState(() => _saving = true);
+    final now = DateTime.now();
+    final activityDate = DateTime(
+      _activityDate.year, _activityDate.month, _activityDate.day, now.hour, now.minute);
+    final recordId = now.microsecondsSinceEpoch.toString();
+    final reminderId = int.parse(recordId) % 2000000000;
+    final currentCrop = _currentCrop;
+    final record = <String, dynamic>{
+      'id': recordId,
+      'type': widget.type,
+      'plotId': _plotId,
+      'title': title,
+      'price': price,
+      'note': _note.text.trim(),
+      'itemPhoto': _itemPhotos.isEmpty ? null : _itemPhotos.first,
+      'itemPhotos': _itemPhotos,
+      'billPhoto': _billPhotos.isEmpty ? null : _billPhotos.first,
+      'billPhotos': _billPhotos,
+      'date': activityDate.toIso8601String(),
+    };
+
+    if (_needsFarmDetails) {
+      record['season'] = _season;
+      record['year'] = _year;
+      record['activityDate'] = activityDate.toIso8601String();
+    }
+    if (widget.type == 'FASAL') {
+      record['cropName'] = title;
+      record['sowingDate'] = activityDate.toIso8601String();
+    }
+    if (widget.type == 'HARA_BEEJ') {
+      record['seedName'] = title;
+      record['kyariNumber'] = _kyariNumber.text.trim();
+      record['sowingDate'] = activityDate.toIso8601String();
+    }
+    if (widget.type == 'DAWAI') {
+      record['purpose'] = _purpose;
+      record['cropAtUse'] = currentCrop == null
+          ? 'Fasal record nahi hai'
+          : (currentCrop['cropName'] ?? currentCrop['title'] ?? 'Fasal').toString();
+      record['applicationDate'] = activityDate.toIso8601String();
+      record['reminderDate'] = _reminderEnabled ? _reminderAt?.toIso8601String() : null;
+      record['reminderId'] = _reminderEnabled ? reminderId : null;
+    }
+
     try {
-      final now = DateTime.now();
-      await _storage.addRecord('khet', {
-        'id': now.microsecondsSinceEpoch.toString(),
-        'type': widget.type,
-        'plotId': _plotId,
-        'title': _title.text.trim(),
-        'price': _price.text.trim(),
-        'note': _note.text.trim(),
-        'itemPhoto': _itemPhotos.isEmpty ? null : _itemPhotos.first,
-        'itemPhotos': _itemPhotos,
-        'billPhoto': _billPhotos.isEmpty ? null : _billPhotos.first,
-        'billPhotos': _billPhotos,
-        'date': now.toIso8601String(),
-      });
-      if (mounted) Navigator.pop(context);
+      await _storage.addRecord('khet', record);
+      String? reminderError;
+      if (widget.type == 'DAWAI' && _reminderEnabled && _reminderAt != null) {
+        try {
+          await FarmReminderService.schedule(
+            id: reminderId,
+            scheduledAt: _reminderAt!,
+            title: 'KHATA: ' + title,
+            body: 'Dawai dalni hai · ' + _purpose + ' · Killa: ' + plotLabel(_storage.records('plots').firstWhere((p) => p['id'] == _plotId)),
+          );
+        } catch (error) {
+          reminderError = error.toString();
+        }
+      }
+      if (mounted) {
+        final messenger = ScaffoldMessenger.of(context);
+        Navigator.pop(context);
+        if (reminderError != null) {
+          messenger.showSnackBar(SnackBar(content: Text('Entry save ho gayi, reminder nahi laga: ' + reminderError)));
+        }
+      }
     } catch (error) {
-      _error('Could not save Khet entry: $error');
+      _error('Could not save Khet entry: ' + error.toString());
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -849,30 +1137,113 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text('Add ${widget.type}')),
-    body: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title / Name')),
-        const SizedBox(height: 12),
-        KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
-        const SizedBox(height: 12),
-        TextField(controller: _price, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Price (₹)')),
-        const SizedBox(height: 12),
-        TextField(controller: _note, minLines: 2, maxLines: 4,
-          decoration: const InputDecoration(labelText: 'Note')),
-        const SizedBox(height: 18),
-        _photoButtons('Item Photos', false),
-        const SizedBox(height: 12),
-        _photoButtons('Bill Photos', true),
-        const SizedBox(height: 22),
-        FilledButton(onPressed: _saving ? null : _save,
-          child: Text(_saving ? 'Saving…' : 'Save ${widget.type}')),
-      ],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final farmPlot = _needsFarmDetails;
+    final titleLabel = widget.type == 'FASAL' ? 'Fasal ka naam'
+      : widget.type == 'HARA_BEEJ' ? 'Hara beej / chara ka naam'
+      : widget.type == 'DAWAI' ? 'Dawai ka naam' : 'Title / Name';
+    return Scaffold(
+      appBar: AppBar(title: Text('Add ' + widget.type.replaceAll('_', ' '))),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          TextField(
+            controller: _title,
+            decoration: InputDecoration(labelText: titleLabel),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 12),
+          KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+          if (farmPlot) ...[
+            const SizedBox(height: 8),
+            if (widget.type == 'DAWAI')
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.grass_outlined),
+                  title: const Text('Is kille mein abhi kaunsi fasal hai?'),
+                  subtitle: Text(_currentCropName()),
+                ),
+              ),
+            if (widget.type == 'HARA_BEEJ') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _kyariNumber,
+                decoration: const InputDecoration(labelText: 'Kaunsi kyari? (number / naam)'),
+              ),
+            ],
+            if (widget.type == 'DAWAI') ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: _purpose,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Dawai ka kaam'),
+                items: const [
+                  DropdownMenuItem(value: 'Herbicide (ghas khatam karne wali)', child: Text('Ghas khatam karne wali')),
+                  DropdownMenuItem(value: 'Insecticide (keede ki dawa)', child: Text('Keede ki dawa')),
+                  DropdownMenuItem(value: 'Fungicide (fungus ki dawa)', child: Text('Fungus ki dawa')),
+                  DropdownMenuItem(value: 'Other spray', child: Text('Other spray')),
+                ],
+                onChanged: (value) => setState(() => _purpose = value ?? _purpose),
+              ),
+            ],
+            const SizedBox(height: 12),
+            SeasonYearFields(
+              season: _season,
+              year: _year,
+              onSeasonChanged: (value) => setState(() => _season = value),
+              onYearChanged: (value) => setState(() => _year = value),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _pickActivityDate,
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: Text(_dateLabel + ': ' + DateFormat('dd MMM yyyy').format(_activityDate)),
+            ),
+          ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: _price,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: widget.type == 'DAWAI' ? 'Dawai ka kharcha (₹)' : 'Price / kharcha (₹)',
+            ),
+          ),
+          if (widget.type == 'DAWAI') ...[
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Is dawai ke liye future reminder lagayein'),
+              value: _reminderEnabled,
+              onChanged: (value) => setState(() {
+                _reminderEnabled = value;
+                if (!value) _reminderAt = null;
+              }),
+            ),
+            if (_reminderEnabled)
+              OutlinedButton.icon(
+                onPressed: _pickReminder,
+                icon: const Icon(Icons.notifications_active_outlined),
+                label: Text(_reminderAt == null
+                  ? 'Reminder date aur time chunein'
+                  : 'Reminder: ' + DateFormat('dd MMM yyyy, hh:mm a').format(_reminderAt!)),
+              ),
+          ],
+          const SizedBox(height: 12),
+          TextField(controller: _note, minLines: 2, maxLines: 4,
+            decoration: const InputDecoration(labelText: 'Note')),
+          const SizedBox(height: 18),
+          _photoButtons('Item Photos', false),
+          const SizedBox(height: 12),
+          _photoButtons('Bill Photos', true),
+          const SizedBox(height: 22),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? 'Saving…' : 'Save ' + widget.type.replaceAll('_', ' ')),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class AddTractorWorkScreen extends StatefulWidget {

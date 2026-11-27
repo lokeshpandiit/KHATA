@@ -6,10 +6,12 @@ import 'screens/khet_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/storage_backup_service.dart';
+import 'services/farm_reminder_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await StorageBackupService.instance.initialize();
+  await FarmReminderService.initialize();
   runApp(const KhataApp());
 }
 
