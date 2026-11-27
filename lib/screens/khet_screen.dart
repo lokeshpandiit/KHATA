@@ -872,7 +872,6 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
     _borrowedNaharMinutes.dispose();
     _borrowedKuaMinutes.dispose();
     _note.dispose();
-    _ownerNameController.dispose();
     super.dispose();
   }
 
