@@ -4,6 +4,7 @@ import 'screens/documents_screen.dart';
 import 'screens/hisab_screen.dart';
 import 'screens/khet_screen.dart';
 import 'screens/history_screen.dart';
+import 'screens/dashboard_screen.dart';
 import 'services/storage_backup_service.dart';
 
 Future<void> main() async {
@@ -177,7 +178,7 @@ class _KhataHomeState extends State<KhataHome> {
 
   @override
   Widget build(BuildContext context) {
-    final titles = ['HISAB', 'KHET', 'DOCUMENTS', 'HISTORY'];
+    final titles = ['DASHBOARD', 'HISAB', 'KHET', 'DOCUMENTS', 'HISTORY'];
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -196,6 +197,7 @@ class _KhataHomeState extends State<KhataHome> {
       body: IndexedStack(
         index: _tab,
         children: const [
+          DashboardScreen(),
           HisabScreen(),
           KhetScreen(),
           DocumentsScreen(),
@@ -206,6 +208,11 @@ class _KhataHomeState extends State<KhataHome> {
         selectedIndex: _tab,
         onDestinationSelected: (index) => setState(() => _tab = index),
         destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'HOME',
+          ),
           NavigationDestination(
             icon: Icon(Icons.receipt_long_outlined),
             selectedIcon: Icon(Icons.receipt_long),
