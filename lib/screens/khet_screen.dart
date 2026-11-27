@@ -185,7 +185,7 @@ class _KhetScreenState extends State<KhetScreen> {
         'Kaam: ${row['direction']} / ${formatMinutes((row['minutes'] as num?)?.toInt() ?? 0)}',
         if (date != null) 'Date: ${dateLabel(date)}',
         if (includeNote && note.isNotEmpty) 'Note: $note',
-      ].join('\\n'),
+      ].join('\n'),
     );
   }
 
@@ -249,7 +249,6 @@ class _KhetScreenState extends State<KhetScreen> {
       phone: contact['phone'] as String?,
       text: [
         'Pani Net Hisab - ${_storage.senderName}',
-        'Contact: ${contact['name']}',
         'Tubewell: ${formatSignedMinutes(balances['Tubewell'] ?? 0)}',
         'Nahar: ${formatSignedMinutes(balances['Nahar'] ?? 0)}',
       ].join('\n'),
