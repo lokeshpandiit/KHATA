@@ -51,11 +51,6 @@ class DashboardScreen extends StatelessWidget {
       final date = _date(row);
       return date != null && date.year == now.year && date.month == now.month;
     }
-    bool today(Map<String, dynamic> row) {
-      final date = _date(row);
-      return date != null && date.year == now.year && date.month == now.month && date.day == now.day;
-    }
-
     final monthHisabAmount = hisabs.where(thisMonth).fold<double>(
       0, (sum, row) => sum + _amount(row['amount']),
     );
@@ -157,7 +152,7 @@ class DashboardScreen extends StatelessWidget {
           child: ListTile(
             leading: CircleAvatar(child: Icon(item.type == 'HISAB' ? Icons.receipt_long : item.type == 'PANI' ? Icons.water_drop : Icons.agriculture)),
             title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-            subtitle: Text('${item.type} · ${item.date == null ? 'Date unavailable' : DateFormat('dd MMM, hh:mm a').format(item.date!)}${item.details == null || item.details!.isEmpty ? '' : '\\n${item.details}'}'),
+            subtitle: Text('${item.type} · ${item.date == null ? 'Date unavailable' : DateFormat('dd MMM, hh:mm a').format(item.date!)}${item.details.isEmpty ? '' : '\\n${item.details}'}'),
             trailing: item.amount > 0
                 ? Text('${item.direction == 'PAID' ? '−' : '+'}${money.format(item.amount)}',
                     style: TextStyle(color: item.direction == 'PAID' ? Colors.red : Colors.green, fontWeight: FontWeight.w700))
