@@ -6,6 +6,7 @@ import 'screens/hisab_screen.dart';
 import 'screens/khet_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/voice_notes_screen.dart';
 import 'services/storage_backup_service.dart';
 import 'services/farm_reminder_service.dart';
 
@@ -261,6 +262,11 @@ class _KhataHomeState extends State<KhataHome> {
           style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.1),
         ),
         actions: [
+          IconButton(
+            tooltip: 'Voice notes',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const VoiceNotesScreen())),
+            icon: const Icon(Icons.mic_none_outlined),
+          ),
           IconButton(
             tooltip: 'Farm defaults',
             onPressed: _showFarmSettings,
