@@ -129,7 +129,7 @@ class _VoiceNotesScreenState extends State<VoiceNotesScreen> {
             Text(note['date'] as String? ?? '', style: const TextStyle(fontSize: 11)),
           ]),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (hasAudio) IconButton(icon: Icon(playing == audio ? Icons.pause : Icons.play_arrow), onPressed: () => playAudio(audio ?? '')),
+            if (hasAudio) IconButton(icon: Icon(playing == audio ? Icons.pause : Icons.play_arrow), onPressed: () => playAudio(audio)),
             IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red), onPressed: () => deleteNote(note)),
           ]),
         ));
