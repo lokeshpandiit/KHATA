@@ -1322,15 +1322,6 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  String _currentCropName() {
-    final crop = _currentCrop;
-    if (crop == null) return 'Is kille mein $_season $_year ki fasal ki entry nahi mili';
-    final cropName = (crop['cropName'] ?? crop['title'] ?? 'Fasal').toString();
-    final season = (crop['season'] ?? '').toString();
-    final year = crop['year']?.toString() ?? '';
-    return cropName + (season.isEmpty ? '' : ' · ' + season) + (year.isEmpty ? '' : ' ' + year);
-  }
-
   Future<void> _save() async {
     final title = _title.text.trim();
     final price = double.tryParse(_price.text.trim()) ?? 0;
