@@ -59,13 +59,90 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void dispose(){_search.dispose();super.dispose();}
   @override
   Widget build(BuildContext context) {
-    final rows=_items();
-    const filters=['All','HISAB','KHET','PANI','DOCUMENTS'];
-    return Column(children:[
-      Padding(padding:const EdgeInsets.fromLTRB(16,8,16,10),child:TextField(controller:_search,onChanged:(_)=>setState(()=>{}),decoration:InputDecoration(hintText:'Search history',prefixIcon:const Icon(Icons.search),suffixIcon:_search.text.isEmpty?null:IconButton(icon:const Icon(Icons.clear),onPressed:()=>setState(_search.clear)),filled:true,fillColor:Colors.white,border:OutlineInputBorder(borderRadius:BorderRadius.circular(14),borderSide:BorderSide.none)))),
-      SizedBox(height:44,child:ListView(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:12),children:filters.map((f)=>Padding(padding:const EdgeInsets.symmetric(horizontal:4),child:ChoiceChip(label:Text(f),selected:_filter==f,onSelected:(_)=>setState(()=>_filter=f))).toList())),
-      Expanded(child:rows.isEmpty?const Center(child:Text('No history records found')):ListView.builder(padding:const EdgeInsets.all(16),itemCount:rows.length,itemBuilder:(context,index){final i=rows[index];final icon=switch(i.type){'HISAB'=>Icons.receipt_long_outlined,'KHET'=>Icons.agriculture_outlined,'PANI'=>Icons.water_drop_outlined,_=>Icons.folder_outlined};return Card(margin:const EdgeInsets.only(bottom:10),child:ListTile(leading:CircleAvatar(child:Icon(icon)),title:Text(i.title.isEmpty?i.type:i.title,style:const TextStyle(fontWeight:FontWeight.w600)),subtitle:Text('${i.subtitle.isEmpty?'':i.subtitle+'\n'}${DateFormat('dd MMM yyyy · hh:mm a').format(i.date)}'),isThreeLine:i.subtitle.isNotEmpty,trailing:Text(i.type,style:const TextStyle(fontSize:11,fontWeight:FontWeight.bold))));})),
-    ]);
+    final rows = _items();
+    const filters = ['All', 'HISAB', 'KHET', 'PANI', 'DOCUMENTS'];
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+          child: TextField(
+            controller: _search,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: 'Search history',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _search.text.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () => setState(() => _search.clear()),
+                    ),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ),
+        SizedBox(
+          height: 44,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            children: filters
+                .map(
+                  (f) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ChoiceChip(
+                      label: Text(f),
+                      selected: _filter == f,
+                      onSelected: (_) => setState(() => _filter = f),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        Expanded(
+          child: rows.isEmpty
+              ? const Center(child: Text('No history records found'))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: rows.length,
+                  itemBuilder: (context, index) {
+                    final item = rows[index];
+                    final icon = switch (item.type) {
+                      'HISAB' => Icons.receipt_long_outlined,
+                      'KHET' => Icons.agriculture_outlined,
+                      'PANI' => Icons.water_drop_outlined,
+                      _ => Icons.folder_outlined,
+                    };
+                    final subtitle = item.subtitle.isEmpty
+                        ? DateFormat('dd MMM yyyy · hh:mm a').format(item.date)
+                        : '${item.subtitle}\n${DateFormat('dd MMM yyyy · hh:mm a').format(item.date)}';
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: ListTile(
+                        leading: CircleAvatar(child: Icon(icon)),
+                        title: Text(
+                          item.title.isEmpty ? item.type : item.title,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(subtitle),
+                        isThreeLine: item.subtitle.isNotEmpty,
+                        trailing: Text(
+                          item.type,
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
   }
 }
 
