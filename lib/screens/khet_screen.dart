@@ -1784,6 +1784,7 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final mins = _minutes;
     if (mins.values.any((m) => m <= 0)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kua ke minutes sahi bharein')));
@@ -1915,6 +1916,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
     _total.dispose();
     _paid.dispose();
     _note.dispose();
+    _ownerNameController.dispose();
     super.dispose();
   }
 
@@ -1963,6 +1965,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     final total = double.tryParse(_total.text.trim()) ?? 0;
     final paid = double.tryParse(_paid.text.trim()) ?? 0;
     _customerName = _ownerNameController.text.trim();
