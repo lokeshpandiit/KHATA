@@ -1246,8 +1246,6 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     return crops.isEmpty ? null : crops.first;
   }
 
-  Map<String, dynamic>? get _currentCrop => _currentCropFor(_plotId);
-
   @override
   void dispose() {
     _title.dispose();
