@@ -192,7 +192,9 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                             (row['cropName'] ?? row['title'] ?? 'Fasal').toString(),
                             row['harvested'] == true
                               ? 'Katayi poori · ' + ((row['harvestDate'] ?? '').toString().isEmpty ? '' : DateFormat('dd MMM yyyy').format(DateTime.tryParse(row['harvestDate'].toString()) ?? DateTime.now()))
-                              : (row['note'] ?? '').toString(),
+                              : row['plannedHarvestDate'] is String
+                                  ? 'Planned katayi · ' + DateFormat('dd MMM yyyy').format(DateTime.tryParse(row['plannedHarvestDate'].toString()) ?? DateTime.now())
+                                  : (row['note'] ?? '').toString(),
                           ),
                           if (row['harvested'] != true && widget.plot['isMine'] == true)
                             Align(
