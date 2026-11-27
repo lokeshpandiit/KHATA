@@ -118,6 +118,7 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
         final crops = entries.where((row) => row['type'] == 'FASAL').toList();
         final fodder = entries.where((row) => row['type'] == 'HARA_BEEJ').toList();
         final dawai = entries.where((row) => row['type'] == 'DAWAI').toList();
+        final khaad = entries.where((row) => row['type'] == 'KHAD').toList();
         final latestPani = pani.isEmpty ? null : pani.first;
         final activeCrops = crops.where((row) => row['harvested'] != true).toList();
         final latestCrop = activeCrops.isEmpty ? null : activeCrops.first;
@@ -196,6 +197,13 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                         row,
                         (row['title'] ?? 'Dawai').toString(),
                         (row['purpose'] ?? '').toString() + ' · Fasal: ' + (row['cropAtUse'] ?? 'Not recorded').toString() + ' · ₹' + (row['price'] ?? 0).toString(),
+                      )).toList()),
+                  _section('Khaad history', khaad.isEmpty
+                    ? [const Text('Abhi khaad ki entry nahi hai.')]
+                    : khaad.map((row) => _activity(
+                        row,
+                        (row['title'] ?? 'Khaad').toString(),
+                        '${row['fertilizerType'] ?? row['purpose'] ?? ''} · Fasal: ${row['cropAtUse'] ?? 'Not recorded'} · ₹${row['price'] ?? 0}',
                       )).toList()),
                   _section('Paani history', pani.isEmpty
                     ? [const Text('Abhi paani ki entry nahi hai.')]
