@@ -33,7 +33,21 @@ jobs:
           fi
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
-      - run: flutter build apk --release
+      - name: Build release APK with retry for temporary Maven rate limits
+        run: |
+          for attempt in 1 2 3 4; do
+            echo "Release APK build attempt ${attempt}/4"
+            if flutter build apk --release; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 4 ]; then
+              echo "Release APK build failed after 4 attempts."
+              exit 1
+            fi
+            wait_seconds=$((attempt * 45))
+            echo "Build failed; waiting ${wait_seconds}s before retry (temporary dependency server errors may clear)."
+            sleep "$wait_seconds"
+          done
       - name: Rename APK with version
         run: |
           VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
