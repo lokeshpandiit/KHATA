@@ -247,7 +247,13 @@ class _KhetScreenState extends State<KhetScreen> {
     controller.dispose();
     if (amount == null) return;
     final total = _amount(row['totalAmount'] ?? row['price']);
-    final paid = _amount(row['paidAmount']) + amount;
+    final oldPaid = _amount(row['paidAmount']);
+    final oldBalance = (total - oldPaid).clamp(0, double.infinity).toDouble();
+    if (amount > oldBalance) {
+      _error('Payment cannot be greater than pending balance ₹${oldBalance.toStringAsFixed(0)}');
+      return;
+    }
+    final paid = oldPaid + amount;
     final balance = (total - paid).clamp(0, double.infinity).toDouble();
     final updated = Map<String, dynamic>.from(row)
       ..['paidAmount'] = paid
@@ -422,7 +428,10 @@ class _KhetScreenState extends State<KhetScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 5),
                 child: Text('Due date: ${DateFormat('dd MMM yyyy').format(due)}',
-                  style: TextStyle(color: due.isBefore(DateTime.now()) && balance > 0 ? Colors.red : Colors.black54)),
+                  style: TextStyle(
+                    color: due.isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day)) && balance > 0
+                        ? Colors.red : Colors.black54,
+                  )),
               ),
             if (photos.isNotEmpty)
               Padding(
