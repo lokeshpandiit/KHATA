@@ -488,7 +488,7 @@ class _KhetScreenState extends State<KhetScreen> {
     final months = availableMonths(_entries);
     if (!months.contains(_month)) _month = 'All months';
     final rows = _filtered;
-    const tabs = ['ALL', 'DAWAI', 'FASAL', 'TRACTOR', 'KUA', 'OTHER', 'PENDING'];
+    const tabs = ['ALL', 'DAWAI', 'FASAL', 'TRACTOR', 'KUA', 'OTHER'];
     final addLabel = switch (_tab) {
       'DAWAI' => 'Add Dawai',
       'FASAL' => 'Add Fasal',
