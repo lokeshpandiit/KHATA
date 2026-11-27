@@ -45,19 +45,30 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
       lastDate: DateTime(now.year + 8),
     );
     if (picked == null || !mounted) return;
+    final futureHarvest = DateUtils.dateOnly(picked).isAfter(
+      DateUtils.dateOnly(now),
+    );
     await FutureDateReminderPrompt.check(
       context,
       date: picked,
       taskTitle: 'Fasal katni - ${crop['title'] ?? 'Fasal'}',
     );
     if (!mounted) return;
+    final pickedIso = DateTime(picked.year, picked.month, picked.day).toIso8601String();
     final updated = Map<String, dynamic>.from(crop)
-      ..['harvested'] = true
-      ..['harvestDate'] = DateTime(picked.year, picked.month, picked.day).toIso8601String()
-      ..['harvestedAt'] = DateTime.now().toIso8601String();
+      ..['harvested'] = !futureHarvest
+      ..['harvestDate'] = futureHarvest ? null : pickedIso
+      ..['plannedHarvestDate'] = futureHarvest ? pickedIso : null
+      ..['harvestedAt'] = futureHarvest ? null : DateTime.now().toIso8601String();
     await StorageBackupService.instance.updateRecord('khet', crop['id'].toString(), updated);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fasal katne ka record save ho gaya. Ab nayi fasal add kar sakte hain.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(futureHarvest
+              ? 'Fasal katne ki planned date save ho gayi. Fasal abhi kati hui mark nahi hui.'
+              : 'Fasal katne ka record save ho gaya. Ab nayi fasal add kar sakte hain.'),
+        ),
+      );
       setState(() {});
     }
   }
