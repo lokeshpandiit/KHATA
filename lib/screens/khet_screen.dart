@@ -191,9 +191,7 @@ class _KhetScreenState extends State<KhetScreen> {
       final dieselNet = _personWaterTotalByWell(rows, 'Diya', 'Diesel') -
           _personWaterTotalByWell(rows, 'Liya', 'Diesel');
       final net = solarNet + dieselNet;
-      cards.add(SizedBox(
-        width: 258,
-        child: Card(
+      cards.add(Card(
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Column(
@@ -244,12 +242,18 @@ class _KhetScreenState extends State<KhetScreen> {
         ),
       );
     }
-    return SizedBox(
-      height: 126,
-      child: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        scrollDirection: Axis.horizontal,
-        children: cards,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
+            child: Text('व्यक्ति-wise पानी का नेट हिसाब',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          ),
+          ...cards,
+        ],
       ),
     );
   }
