@@ -226,6 +226,8 @@ class _KhataHomeState extends State<KhataHome> {
                 const SizedBox(width: 8),
                 Expanded(child: OutlinedButton(onPressed: () async { final v=await pick(to); if(v!=null)setDialogState(()=>to=v); }, child: Text('To: ${label(to)}'))),
               ]),
+              const SizedBox(height: 6),
+              Align(alignment: Alignment.centerLeft, child: Text('Total duration: ${formatMinutes((to.hour * 60 + to.minute - (from.hour * 60 + from.minute) + 1440) % 1440)}', style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600))),
               const SizedBox(height: 16),
               TextField(controller: received, maxLines: 3, decoration: const InputDecoration(labelText: 'Default message — PANI LIYA (received)', helperText: 'Use: {naam}, {minute}, {date}')),
               const SizedBox(height: 12),
