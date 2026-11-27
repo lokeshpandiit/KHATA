@@ -128,7 +128,13 @@ class DashboardScreen extends StatelessWidget {
         Row(children: [
           Expanded(child: _MetricCard(title: 'Khet expenses', value: money.format(monthKhetAmount), icon: Icons.agriculture, tint: const Color(0xFFF8EEDC))),
           const SizedBox(width: 10),
-          Expanded(child: _MetricCard(title: 'Pani total', value: '${monthPani ~/ 60}h ${monthPani % 60}m', icon: Icons.water_drop, tint: const Color(0xFFE7F3FA))),
+          Expanded(child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => _MonthPaniScreen(rows: khet.where((row) => thisMonth(row) && row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON').toList(), storage: storage),
+            )),
+            child: _MetricCard(title: 'Pani total', value: '${monthPani ~/ 60}h ${monthPani % 60}m', icon: Icons.water_drop, tint: const Color(0xFFE7F3FA)),
+          )),
         ]),
         const SizedBox(height: 22),
         const Text('This month at a glance', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
@@ -277,6 +283,54 @@ class _MonthPersonLedgerScreen extends StatelessWidget {
               );
             }).toList()),
     );
+  }
+}
+
+
+class _MonthPaniScreen extends StatelessWidget {
+  const _MonthPaniScreen({required this.rows, required this.storage});
+  final List<Map<String, dynamic>> rows;
+  final StorageBackupService storage;
+  int mins(Map<String, dynamic> r) => r['minutes'] is num ? (r['minutes'] as num).toInt() : int.tryParse('\${r['minutes']}') ?? 0;
+  String fmt(int m) => '\${m ~/ 60}h \${m % 60}m';
+  String person(Map<String, dynamic> r) => (r['contact'] ?? '').toString().trim().isEmpty ? 'Naam nahi diya' : r['contact'].toString();
+  @override
+  Widget build(BuildContext context) {
+    final groups = <String,List<Map<String,dynamic>>>{};
+    for(final r in rows){ groups.putIfAbsent(person(r),()=>[]).add(r); }
+    final names=groups.keys.toList()..sort();
+    final total=rows.fold<int>(0,(s,r)=>s+mins(r));
+    return Scaffold(appBar: AppBar(title: const Text('This month · Pani total')),
+      body: rows.isEmpty ? const Center(child: Text('Is month pani entries nahi hain.')) :
+      ListView(padding: const EdgeInsets.all(16),children:[
+        Card(child: Padding(padding: const EdgeInsets.all(16),child: Column(crossAxisAlignment: CrossAxisAlignment.start,children:[
+          const Text('MONTH TOTAL',style: TextStyle(color: Colors.black54,fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6), Text(fmt(total),style: const TextStyle(fontSize:26,fontWeight:FontWeight.w900,color:Colors.blue)),
+          Text('\${rows.length} entries · \${names.length} people'),
+        ]))),
+        const SizedBox(height:10), const Text('Person-wise pani',style:TextStyle(fontSize:17,fontWeight:FontWeight.w800)),
+        ...names.map((n){final rs=groups[n]!..sort((a,b)=>(DateTime.tryParse(b['date'] as String? ?? '')??DateTime(0)).compareTo(DateTime.tryParse(a['date'] as String? ?? '')??DateTime(0))); final sum=rs.fold<int>(0,(s,r)=>s+mins(r));
+          return Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.water_drop)),title:Text(n,style:const TextStyle(fontWeight:FontWeight.w700)),subtitle:Text('\${rs.length} entries · Tap for details'),trailing:Text(fmt(sum),style:const TextStyle(fontWeight:FontWeight.w800,color:Colors.blue)),onTap:()=>Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>_MonthPaniDetail(name:n,rows:rs,storage:storage))));
+        }),
+      ]));
+  }
+}
+class _MonthPaniDetail extends StatelessWidget {
+  const _MonthPaniDetail({required this.name,required this.rows,required this.storage});
+  final String name; final List<Map<String,dynamic>> rows; final StorageBackupService storage;
+  int mins(Map<String,dynamic> r)=>r['minutes'] is num?(r['minutes'] as num).toInt():int.tryParse('\${r['minutes']}')??0;
+  String fmt(int m)=>'\${m ~/ 60}h \${m % 60}m';
+  @override
+  Widget build(BuildContext context){
+    final rs=[...rows]..sort((a,b)=>(DateTime.tryParse(a['date'] as String? ?? '')??DateTime(0)).compareTo(DateTime.tryParse(b['date'] as String? ?? '')??DateTime(0)));
+    final total=rs.fold<int>(0,(s,r)=>s+mins(r));
+    return Scaffold(appBar:AppBar(title:Text(name,overflow:TextOverflow.ellipsis)),body:ListView(padding:const EdgeInsets.all(16),children:[
+      Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('TOTAL PANI',style:TextStyle(color:Colors.black54,fontWeight:FontWeight.w700)),const SizedBox(height:5),Text(fmt(total),style:const TextStyle(fontSize:26,fontWeight:FontWeight.w900,color:Colors.blue)),Text('\${rs.length} entries')]))),
+      const SizedBox(height:10),const Text('Pani history',style:TextStyle(fontSize:17,fontWeight:FontWeight.w800)),
+      ...rs.map((r){final date=DateTime.tryParse(r['date'] as String? ?? '');final plot=r['plotId']==null?'Khet':plotLabelForId(storage,r['plotId']);final direction=(r['direction']??'Apni baari').toString();final source=(r['source']??'').toString();final m=mins(r);final borrowed=r['borrowedMinutes'] is num?(r['borrowedMinutes'] as num).toInt():0;final own=r['ownMinutes'] is num?(r['ownMinutes'] as num).toInt():m;
+        return Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.water_drop)),title:Text('\${plot} · \${direction}'),subtitle:Text([if(date!=null)DateFormat('dd MMM yyyy').format(date),fmt(m),if(source.isNotEmpty)'Source: \${source}',if(borrowed>0)'Apna: \${fmt(own)} · Liya: \${fmt(borrowed)}',if((r['season']??r['year'])!=null)'Fasal/Year: \${r['season']??''} \${r['year']??''}',if((r['note']??'').toString().trim().isNotEmpty)r['note'].toString()].join(' · ')),trailing:Text(fmt(m),style:const TextStyle(fontWeight:FontWeight.w800,color:Colors.blue))));
+      }),
+    ]));
   }
 }
 
