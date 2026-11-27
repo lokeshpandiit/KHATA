@@ -11,6 +11,7 @@ import '../services/khata_sharing_service.dart';
 import '../services/storage_backup_service.dart';
 import '../widgets/khata_widgets.dart';
 import '../widgets/voice_note_player.dart';
+import '../widgets/voice_dictation_field.dart';
 
 class HisabScreen extends StatefulWidget {
   const HisabScreen({super.key});
@@ -411,8 +412,10 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
             onChanged: (value) => setState(() => _direction = value ?? _direction),
           ),
           const SizedBox(height: 12),
-          TextField(controller: _note, minLines: 3, maxLines: 5,
-            decoration: const InputDecoration(labelText: 'Text note (optional)')),
+          VoiceDictationField(
+            controller: _note,
+            label: 'Text note (optional)',
+          ),
           const SizedBox(height: 18),
           const Text('Attachments', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),

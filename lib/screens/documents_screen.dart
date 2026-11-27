@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/storage_backup_service.dart';
 import '../services/khata_sharing_service.dart';
 import '../widgets/khata_widgets.dart';
+import '../widgets/voice_dictation_field.dart';
 
 class DocumentsScreen extends StatefulWidget {
   const DocumentsScreen({super.key});
@@ -695,11 +696,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
               textCapitalization: TextCapitalization.words,
             ),
             const SizedBox(height: 12),
-            TextField(
+            VoiceDictationField(
               controller: _note,
-              decoration: const InputDecoration(labelText: 'Note'),
-              minLines: 2,
-              maxLines: 4,
+              label: 'Note',
             ),
             const SizedBox(height: 18),
             _photoPicker('Bill Photo', false),

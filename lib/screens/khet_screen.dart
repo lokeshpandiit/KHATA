@@ -13,6 +13,7 @@ import '../widgets/khata_widgets.dart';
 import '../widgets/plot_selector.dart';
 import '../widgets/farm_fields.dart';
 import '../services/farm_reminder_service.dart';
+import '../widgets/voice_dictation_field.dart';
 
 class KhetScreen extends StatefulWidget {
   const KhetScreen({super.key});
@@ -938,8 +939,10 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
             ),
           ],
           const SizedBox(height: 12),
-          TextField(controller: _note, minLines: 2, maxLines: 4,
-            decoration: const InputDecoration(labelText: 'Note (jaise: shaam ko uski baari ke baad)')),
+          VoiceDictationField(
+            controller: _note,
+            label: 'Note (jaise: shaam ko uski baari ke baad)',
+          ),
           const SizedBox(height: 20),
           FilledButton(
             onPressed: _saving ? null : _save,
@@ -1322,8 +1325,10 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
               ),
           ],
           const SizedBox(height: 12),
-          TextField(controller: _note, minLines: 2, maxLines: 4,
-            decoration: const InputDecoration(labelText: 'Note')),
+          VoiceDictationField(
+            controller: _note,
+            label: 'Note',
+          ),
           const SizedBox(height: 18),
           _photoButtons('Item Photos', false),
           const SizedBox(height: 12),
@@ -1492,8 +1497,10 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
           label: Text(_dueDate == null ? 'Set payment due date (optional)' : 'Due: ${DateFormat('dd MMM yyyy').format(_dueDate!)}'),
         ),
         const SizedBox(height: 12),
-        TextField(controller: _note, minLines: 2, maxLines: 4,
-          decoration: const InputDecoration(labelText: 'Note (optional)')),
+        VoiceDictationField(
+          controller: _note,
+          label: 'Note (optional)',
+        ),
         const SizedBox(height: 12),
         OutlinedButton.icon(onPressed: _pickPhotos, icon: const Icon(Icons.photo_library_outlined),
           label: const Text('Add bill / work photos')),
