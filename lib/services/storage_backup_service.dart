@@ -75,6 +75,7 @@ class StorageBackupService {
       _data.putIfAbsent(category, () => []);
     }
     _seedDefaultPlots();
+    _ensurePlotOwnership();
     await _save();
   }
 
@@ -87,16 +88,34 @@ class StorageBackupService {
       '2-1': '2', '2-2': '4',
       '3-1': '1', '3-2': 'C',
     };
+    const myPlotPositions = <String>{
+      '1-1', '1-2', '2-1', '2-2', '3-1',
+    };
     for (var row = 0; row < 4; row++) {
       for (var column = 0; column < 4; column++) {
+        final position = '$row-$column';
         plots.add({
           'id': 'plot-$row-$column',
           'row': row,
           'column': column,
-          'number': initialNumbers['$row-$column'] ?? '',
+          'number': initialNumbers[position] ?? '',
           'name': '',
+          'isMine': myPlotPositions.contains(position),
         });
       }
+    }
+  }
+
+  void _ensurePlotOwnership() {
+    final myPlotIds = <String>{
+      'plot-1-1', // 3
+      'plot-1-2', // 5
+      'plot-2-1', // 2
+      'plot-2-2', // 4
+      'plot-3-1', // 1
+    };
+    for (final plot in _data['plots'] ?? const <Map<String, dynamic>>[]) {
+      plot.putIfAbsent('isMine', () => myPlotIds.contains(plot['id']));
     }
   }
 
@@ -317,6 +336,7 @@ class StorageBackupService {
       _data.putIfAbsent(category, () => []);
     }
     _seedDefaultPlots();
+    _ensurePlotOwnership();
     revision.value++;
   }
 

@@ -16,28 +16,40 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
   Future<void> _editPlot(Map<String, dynamic> plot) async {
     final numberController = TextEditingController(text: plot['number'] as String? ?? '');
     final nameController = TextEditingController(text: plot['name'] as String? ?? '');
-    final result = await showDialog<Map<String, String>>(
+    var isMine = plot['isMine'] as bool? ?? false;
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text('Edit Killa ${plotLabel(plot)}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: numberController, autofocus: true,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(labelText: 'Killa number / code', hintText: 'e.g. 3, 5, J, S')),
-            const SizedBox(height: 12),
-            TextField(controller: nameController, textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Khet name / pehchan', hintText: 'Kuan wala kila, Kothe wala kila')),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Edit Killa ${plotLabel(plot)}'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: numberController, autofocus: true,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(labelText: 'Killa number / code', hintText: 'e.g. 3, 5, J, S')),
+              const SizedBox(height: 12),
+              TextField(controller: nameController, textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Khet name / pehchan', hintText: 'Kuan wala kila, Kothe wala kila')),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: isMine,
+                onChanged: (value) => setDialogState(() => isMine = value ?? false),
+                title: const Text('Mera khet (dropdown mein dikhaye)'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, {
+              'number': numberController.text.trim(),
+              'name': nameController.text.trim(),
+              'isMine': isMine,
+            }), child: const Text('Save')),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(dialogContext, {
-            'number': numberController.text.trim(),
-            'name': nameController.text.trim(),
-          }), child: const Text('Save')),
-        ],
       ),
     );
     numberController.dispose();

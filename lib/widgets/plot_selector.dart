@@ -26,9 +26,7 @@ class KhetPlotDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final plots = StorageBackupService.instance.records('plots')
-        .where((plot) =>
-            (plot['number'] as String? ?? '').trim().isNotEmpty ||
-            (plot['name'] as String? ?? '').trim().isNotEmpty)
+        .where((plot) => plot['isMine'] == true)
         .toList();
     final current = plots.any((plot) => plot['id'] == selectedId) ? selectedId : null;
     return DropdownButtonFormField<String>(
