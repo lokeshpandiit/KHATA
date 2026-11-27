@@ -39,7 +39,7 @@ dependencies:
   shared_preferences: ^2.3.5
   intl: ^0.19.0
   share_plus: ^10.1.4
-  whatsapp_share2: ^2.1.1
+  whatsapp_share_plus: ^2.0.0
   permission_handler: ^11.3.1
   archive: ^3.6.1
   google_sign_in: ^6.2.2
