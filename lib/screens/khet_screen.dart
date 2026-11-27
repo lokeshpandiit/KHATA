@@ -837,8 +837,6 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   String _season = 'Rabi';
   int _year = DateTime.now().year;
   DateTime _activityDate = DateTime.now();
-  DateTime? _harvestDate;
-  bool _harvested = false;
   bool _saving = false;
 
   List<Map<String, dynamic>> get _contacts => _storage.records('contacts');
@@ -1238,6 +1236,8 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   bool _khalaOnly = false;
   final _areaController = TextEditingController();
   DateTime _activityDate = DateTime.now();
+  DateTime? _harvestDate;
+  bool _harvested = false;
   bool _reminderEnabled = false;
   DateTime? _reminderAt;
   bool _saving = false;
