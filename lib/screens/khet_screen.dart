@@ -392,7 +392,7 @@ class _KhetScreenState extends State<KhetScreen> {
         'Solar Kua: ${formatSignedMinutes(balances['Solar'] ?? 0)}',
         'Diesel Kua: ${formatSignedMinutes(balances['Diesel'] ?? 0)}',
         'TOTAL NET: ${formatSignedMinutes(totalNet)}',
-      ].join('\\n'),
+      ].join('\n'),
     );
   }
 
