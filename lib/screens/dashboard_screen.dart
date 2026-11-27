@@ -417,21 +417,274 @@ class _KhetExpensesScreen extends StatelessWidget {
  }
 }
 class _PendingPaymentsScreen extends StatefulWidget {
- const _PendingPaymentsScreen({required this.rows,required this.money,required this.storage});
- final List<Map<String,dynamic>> rows; final NumberFormat money; final StorageBackupService storage;
- @override State<_PendingPaymentsScreen> createState()=>_PendingPaymentsScreenState();
+  const _PendingPaymentsScreen({
+    required this.rows,
+    required this.money,
+    required this.storage,
+  });
+
+  final List<Map<String, dynamic>> rows;
+  final NumberFormat money;
+  final StorageBackupService storage;
+
+  @override
+  State<_PendingPaymentsScreen> createState() => _PendingPaymentsScreenState();
 }
-class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen>{
- double amount(dynamic v)=>v is num?v.toDouble():double.tryParse((v??'').toString().replaceAll(',','').replaceAll('₹',''))??0;
- double balance(Map<String,dynamic> r){final b=r['balance'];if(b is num)return b.toDouble();return (amount(r['totalAmount']??r['price'])-amount(r['paidAmount'])).clamp(0,double.infinity).toDouble();}
- Future<void> addPlan() async{
-  final title=TextEditingController(),note=TextEditingController();DateTime? when;
-  final ok=await showDialog<bool>(context:context,builder:(ctx)=>StatefulBuilder(builder:(ctx,setD)=>AlertDialog(title:const Text('Future Plan / Reminder'),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:title,decoration:const InputDecoration(labelText:'Kya karna hai?')),TextField(controller:note,decoration:const InputDecoration(labelText:'Details (optional)')),OutlinedButton.icon(onPressed:()async{final d=await showDatePicker(context:ctx,initialDate:DateTime.now().add(const Duration(days:1)),firstDate:DateTime.now(),lastDate:DateTime.now().add(const Duration(days:3650)));if(d==null)return;final t=await showTimePicker(context:ctx,initialTime:const TimeOfDay(hour:9,minute:0));if(t!=null)setD(()=>when=DateTime(d.year,d.month,d.day,t.hour,t.minute));},icon:const Icon(Icons.alarm),label:Text(when==null?'Date/time choose karein':DateFormat('dd MMM yyyy, hh:mm a').format(when!)))]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Save'))]));
-  if(ok!=true||title.text.trim().isEmpty||when==null||!when!.isAfter(DateTime.now()))return;
-  final id=DateTime.now().millisecondsSinceEpoch;final rec={'id':'plan-$id','notificationId':id%2147483647,'title':title.text.trim(),'note':note.text.trim(),'date':when!.toIso8601String(),'done':false,'createdAt':DateTime.now().toIso8601String()};
-  await widget.storage.addRecord('plans',rec);try{await FarmReminderService.schedule(id:rec['notificationId'] as int,scheduledAt:when!,title:'KHATA Reminder: ${rec['title']}',body:rec['note'] as String);}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Plan save hua, notification permission/check karein: $e')));}if(mounted)setState((){});
- }
- Future<void> deletePlan(Map<String,dynamic> p)async{await FarmReminderService.cancel(p['notificationId'] as int? ?? 0);await widget.storage.deleteRecord('plans',p['id'].toString());setState((){});}
- @override Widget build(BuildContext context){final plans=widget.storage.records('plans').where((p)=>p['done']!=true).toList()..sort((a,b)=>(DateTime.tryParse(a['date']?.toString()??'')??DateTime(9999)).compareTo(DateTime.tryParse(b['date']?.toString()??'')??DateTime(9999)));final total=widget.rows.fold<double>(0,(s,r)=>s+balance(r));
- return Scaffold(appBar:AppBar(title:const Text('Pending / Future Plans')),floatingActionButton:FloatingActionButton.extended(onPressed:addPlan,icon:const Icon(Icons.add_alarm),label:const Text('Add Future Plan')),body:ListView(padding:const EdgeInsets.all(16),children:[Card(child:ListTile(title:const Text('Pending Tractor Payments'),subtitle:Text('${widget.rows.length} records'),trailing:Text(widget.money.format(total),style:const TextStyle(color:Colors.red,fontWeight:FontWeight.bold,fontSize:18)))),...widget.rows.map((r){final due=DateTime.tryParse(r['dueDate']?.toString()??'');return Card(child:ListTile(title:Text((r['customerName']??r['contact']??'Customer').toString()),subtitle:Text('${r['work']??r['title']??'Tractor work'}${due==null?'':'\\nDue: '+DateFormat('dd MMM yyyy').format(due)}'),trailing:Text(widget.money.format(balance(r)),style:const TextStyle(color:Colors.red,fontWeight:FontWeight.bold))));}),const SizedBox(height:16),const Text('Future Plans & Reminders',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),if(plans.isEmpty)const Padding(padding:EdgeInsets.all(12),child:Text('Koi plan nahi. Add Future Plan se banayein.')),...plans.map((p){final d=DateTime.tryParse(p['date']?.toString()??'');return Card(child:ListTile(leading:const Icon(Icons.notifications_active,color:Colors.orange),title:Text(p['title']?.toString()??''),subtitle:Text('${p['note']??''}${d==null?'':'\\n'+DateFormat('dd MMM yyyy, hh:mm a').format(d)}'),trailing:IconButton(icon:const Icon(Icons.delete_outline),onPressed:()=>deletePlan(p))));})]));}
+
+class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
+  double _amount(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(
+          (value ?? '').toString().replaceAll(',', '').replaceAll('₹', ''),
+        ) ??
+        0;
+  }
+
+  double _balance(Map<String, dynamic> row) {
+    final explicit = row['balance'];
+    if (explicit is num) return explicit.toDouble();
+    return (_amount(row['totalAmount'] ?? row['price']) -
+            _amount(row['paidAmount']))
+        .clamp(0, double.infinity)
+        .toDouble();
+  }
+
+  Future<void> _addPlan() async {
+    final titleController = TextEditingController();
+    final noteController = TextEditingController();
+    DateTime? scheduledAt;
+
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return AlertDialog(
+              title: const Text('Future Plan / Reminder'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      labelText: 'Kya karna hai?',
+                    ),
+                  ),
+                  TextField(
+                    controller: noteController,
+                    decoration: const InputDecoration(
+                      labelText: 'Details (optional)',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final now = DateTime.now();
+                      final date = await showDatePicker(
+                        context: dialogContext,
+                        initialDate: now.add(const Duration(days: 1)),
+                        firstDate: DateTime(now.year, now.month, now.day),
+                        lastDate: DateTime(now.year + 10),
+                      );
+                      if (date == null || !dialogContext.mounted) return;
+                      final time = await showTimePicker(
+                        context: dialogContext,
+                        initialTime: const TimeOfDay(hour: 9, minute: 0),
+                      );
+                      if (time == null) return;
+                      setDialogState(() {
+                        scheduledAt = DateTime(
+                          date.year,
+                          date.month,
+                          date.day,
+                          time.hour,
+                          time.minute,
+                        );
+                      });
+                    },
+                    icon: const Icon(Icons.alarm),
+                    label: Text(
+                      scheduledAt == null
+                          ? 'Reminder date/time choose karein'
+                          : DateFormat('dd MMM yyyy, hh:mm a')
+                              .format(scheduledAt!),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dialogContext, true),
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (shouldSave != true) return;
+    if (titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kaam ka naam likhein.')),
+      );
+      return;
+    }
+    if (scheduledAt == null || !scheduledAt!.isAfter(DateTime.now())) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Future date aur time choose karein.')),
+      );
+      return;
+    }
+
+    final id = DateTime.now().millisecondsSinceEpoch;
+    final notificationId = id % 2147483647;
+    final record = <String, dynamic>{
+      'id': 'plan-$id',
+      'notificationId': notificationId,
+      'title': titleController.text.trim(),
+      'note': noteController.text.trim(),
+      'date': scheduledAt!.toIso8601String(),
+      'done': false,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+
+    await widget.storage.addRecord('plans', record);
+    try {
+      await FarmReminderService.schedule(
+        id: notificationId,
+        scheduledAt: scheduledAt!,
+        title: 'KHATA Reminder: ${record['title']}',
+        body: record['note'] as String,
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Plan save hua, lekin notification set nahi hui: $error',
+            ),
+          ),
+        );
+      }
+    }
+    titleController.dispose();
+    noteController.dispose();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _deletePlan(Map<String, dynamic> plan) async {
+    final notificationId = plan['notificationId'];
+    if (notificationId is num) {
+      await FarmReminderService.cancel(notificationId.toInt());
+    }
+    await widget.storage.deleteRecord('plans', plan['id'].toString());
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plans = widget.storage
+        .records('plans')
+        .where((plan) => plan['done'] != true)
+        .toList()
+      ..sort((a, b) {
+        final dateA =
+            DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(9999);
+        final dateB =
+            DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(9999);
+        return dateA.compareTo(dateB);
+      });
+
+    final pendingTotal = widget.rows.fold<double>(
+      0,
+      (sum, row) => sum + _balance(row),
+    );
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Pending / Future Plans')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _addPlan,
+        icon: const Icon(Icons.add_alarm),
+        label: const Text('Add Future Plan'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: ListTile(
+              title: const Text('Pending Tractor Payments'),
+              subtitle: Text('${widget.rows.length} records'),
+              trailing: Text(
+                widget.money.format(pendingTotal),
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ),
+          ...widget.rows.map((row) {
+            final due =
+                DateTime.tryParse(row['dueDate']?.toString() ?? '');
+            return Card(
+              child: ListTile(
+                title: Text(
+                  (row['customerName'] ?? row['contact'] ?? 'Customer')
+                      .toString(),
+                ),
+                subtitle: Text(
+                  '${row['work'] ?? row['title'] ?? 'Tractor work'}'
+                  '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}',
+                ),
+                trailing: Text(
+                  widget.money.format(_balance(row)),
+                  style: const TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 16),
+          const Text(
+            'Future Plans & Reminders',
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          if (plans.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(12),
+              child: Text('Koi plan nahi. Add Future Plan se banayein.'),
+            ),
+          ...plans.map((plan) {
+            final date = DateTime.tryParse(plan['date']?.toString() ?? '');
+            return Card(
+              child: ListTile(
+                leading: const Icon(
+                  Icons.notifications_active,
+                  color: Colors.orange,
+                ),
+                title: Text(plan['title']?.toString() ?? ''),
+                subtitle: Text(
+                  '${plan['note'] ?? ''}'
+                  '${date == null ? '' : '\n${DateFormat('dd MMM yyyy, hh:mm a').format(date)}'}',
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () => _deletePlan(plan),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
 }
