@@ -134,13 +134,7 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
               Text('Road aur pakka pani nala', style: TextStyle(fontSize: 11, color: Colors.black54)),
             ])),
             if (_saving)
-              const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
-            else
-              TextButton.icon(
-                onPressed: () => setState(() => _editing = !_editing),
-                icon: Icon(_editing ? Icons.check : Icons.edit_outlined, size: 18),
-                label: Text(_editing ? 'Done' : 'Edit'),
-              ),
+              const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))),
           ]),
         ),
         Padding(
