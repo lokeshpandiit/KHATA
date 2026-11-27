@@ -181,6 +181,7 @@ class _KhataHomeState extends State<KhataHome> {
 
   Future<void> _showFarmSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    var weekday = prefs.getInt('farm_water_turn_weekday') ?? DateTime.friday;
     var from = TimeOfDay(
       hour: prefs.getInt('farm_water_turn_start_hour') ?? 12,
       minute: prefs.getInt('farm_water_turn_start_minute') ?? 0,
@@ -190,10 +191,10 @@ class _KhataHomeState extends State<KhataHome> {
       minute: prefs.getInt('farm_water_turn_end_minute') ?? 0,
     );
     final received = TextEditingController(
-      text: prefs.getString('pani_received_message') ?? 'Maine {naam} se {minute} minute pani liya. Date: {date}',
+      text: prefs.getString('pani_received_message') ?? 'Aaj {naam} se {minute} pani liya hai. Date: {date}',
     );
     final given = TextEditingController(
-      text: prefs.getString('pani_given_message') ?? 'Maine {naam} ko {minute} minute pani diya. Date: {date}',
+      text: prefs.getString('pani_given_message') ?? 'Aaj {naam} ko {minute} pani diya hai. Date: {date}',
     );
     String label(TimeOfDay t) => t.format(context);
     Future<TimeOfDay?> pick(TimeOfDay t) => showTimePicker(context: context, initialTime: t);
@@ -204,21 +205,36 @@ class _KhataHomeState extends State<KhataHome> {
           title: const Text('Settings'),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text('Nahar ki baari ka time', style: TextStyle(fontWeight: FontWeight.w700)),
+              const Text('Pani ki baari ka din aur time', style: TextStyle(fontWeight: FontWeight.w700)),
+              DropdownButtonFormField<int>(
+                initialValue: weekday,
+                decoration: const InputDecoration(labelText: 'Default day'),
+                items: const [
+                  DropdownMenuItem(value: DateTime.monday, child: Text('Monday')),
+                  DropdownMenuItem(value: DateTime.tuesday, child: Text('Tuesday')),
+                  DropdownMenuItem(value: DateTime.wednesday, child: Text('Wednesday')),
+                  DropdownMenuItem(value: DateTime.thursday, child: Text('Thursday')),
+                  DropdownMenuItem(value: DateTime.friday, child: Text('Friday')),
+                  DropdownMenuItem(value: DateTime.saturday, child: Text('Saturday')),
+                  DropdownMenuItem(value: DateTime.sunday, child: Text('Sunday')),
+                ],
+                onChanged: (v) => setDialogState(() => weekday = v ?? weekday),
+              ),
               Row(children: [
                 Expanded(child: OutlinedButton(onPressed: () async { final v=await pick(from); if(v!=null)setDialogState(()=>from=v); }, child: Text('From: ${label(from)}'))),
                 const SizedBox(width: 8),
                 Expanded(child: OutlinedButton(onPressed: () async { final v=await pick(to); if(v!=null)setDialogState(()=>to=v); }, child: Text('To: ${label(to)}'))),
               ]),
               const SizedBox(height: 16),
-              TextField(controller: received, maxLines: 3, decoration: const InputDecoration(labelText: 'Default message — Pani liya', helperText: 'Placeholders: {naam}, {minute}, {date}')),
+              TextField(controller: received, maxLines: 3, decoration: const InputDecoration(labelText: 'Default message — PANI LIYA (received)', helperText: 'Use: {naam}, {minute}, {date}')),
               const SizedBox(height: 12),
-              TextField(controller: given, maxLines: 3, decoration: const InputDecoration(labelText: 'Default message — Pani diya', helperText: 'Placeholders: {naam}, {minute}, {date}')),
+              TextField(controller: given, maxLines: 3, decoration: const InputDecoration(labelText: 'Default message — PANI DIYA (given)', helperText: 'Use: {naam}, {minute}, {date}')),
             ]),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
             FilledButton(onPressed: () async {
+              await prefs.setInt('farm_water_turn_weekday', weekday);
               await prefs.setInt('farm_water_turn_start_hour', from.hour);
               await prefs.setInt('farm_water_turn_start_minute', from.minute);
               await prefs.setInt('farm_water_turn_end_hour', to.hour);
