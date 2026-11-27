@@ -5,6 +5,7 @@ import 'screens/documents_screen.dart';
 import 'screens/hisab_screen.dart';
 import 'screens/khet_screen.dart';
 import 'screens/history_screen.dart';
+import 'screens/voice_notes_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/storage_backup_service.dart';
 import 'services/farm_reminder_service.dart';
@@ -237,7 +238,7 @@ class _KhataHomeState extends State<KhataHome> {
 
   @override
   Widget build(BuildContext context) {
-    final titles = ['DASHBOARD', 'HISAB', 'KHET', 'DOCUMENTS', 'HISTORY'];
+    final titles = ['DASHBOARD', 'HISAB', 'KHET', 'DOCUMENTS', 'HISTORY', 'VOICE NOTES'];
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -266,6 +267,7 @@ class _KhataHomeState extends State<KhataHome> {
           KhetScreen(),
           DocumentsScreen(),
           HistoryScreen(),
+          VoiceNotesScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -297,6 +299,7 @@ class _KhataHomeState extends State<KhataHome> {
             selectedIcon: Icon(Icons.history),
             label: 'HISTORY',
           ),
+          NavigationDestination(icon: Icon(Icons.mic_none_outlined), selectedIcon: Icon(Icons.mic), label: 'VOICE'),
         ],
       ),
     );
