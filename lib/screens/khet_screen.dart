@@ -64,7 +64,8 @@ class _KhetScreenState extends State<KhetScreen> {
           (_tab == 'PENDING'
               ? isPending
               : _tab == 'KUA'
-                  ? category == 'KUA' || isPersonWaterLedger
+                  ? (category == 'KUA' && row['direction'] == 'Dusre ne hamara kua chalaya') ||
+                      (isPersonWaterLedger && row['direction'] == 'Diya')
                   : category == _tab);
       final monthMatch = _month == 'All months' ||
           (date != null && monthKey(date) == _month);
