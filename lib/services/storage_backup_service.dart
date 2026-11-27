@@ -369,7 +369,8 @@ class StorageBackupService {
     _removeDuplicateIds();
     _seedDefaultPlots();
     _ensurePlotOwnership();
-    revision.value++;
+    // Persist a normalized database after restoring a backup so duplicate IDs stay removed.
+    await _save();
   }
 
   Future<void> backupToDrive() async {
