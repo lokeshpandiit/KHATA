@@ -13,15 +13,15 @@ class ContactPickerService {
     );
     if (contact == null) return null;
     final phone = contact.phones
-        .map((item) => item.number.trim())
+        .map((item) => (item.number ?? '').trim())
         .firstWhere((item) => item.isNotEmpty, orElse: () => '');
     if (phone.isEmpty) {
       throw StateError('Selected contact does not have a phone number');
     }
     return {
-      'name': contact.displayName.trim().isEmpty
+      'name': (contact.displayName ?? '').trim().isEmpty
           ? 'Unknown contact'
-          : contact.displayName.trim(),
+          : (contact.displayName ?? '').trim(),
       'phone': phone,
     };
   }
