@@ -165,7 +165,28 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                   ]),
                   _section('Fasal history', crops.isEmpty
                     ? [const Text('Abhi fasal ki entry nahi hai.')]
-                    : crops.map((row) => _activity(row, (row['cropName'] ?? row['title'] ?? 'Fasal').toString(), (row['note'] ?? '').toString())).toList()),
+                    : crops.map((row) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _activity(
+                            row,
+                            (row['cropName'] ?? row['title'] ?? 'Fasal').toString(),
+                            row['harvested'] == true
+                              ? 'Katayi poori · ' + ((row['harvestDate'] ?? '').toString().isEmpty ? '' : DateFormat('dd MMM yyyy').format(DateTime.tryParse(row['harvestDate'].toString()) ?? DateTime.now()))
+                              : (row['note'] ?? '').toString(),
+                          ),
+                          if (row['harvested'] != true && widget.plot['isMine'] == true)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: () => _markHarvested(row),
+                                icon: const Icon(Icons.done_all),
+                                label: const Text('Fasal kat gayi — mark karein'),
+                              ),
+                            ),
+                          const Divider(height: 8),
+                        ],
+                      )).toList()),
                   _section('Hara beej / pashu chara', fodder.isEmpty
                     ? [const Text('Abhi hara beej ki entry nahi hai.')]
                     : fodder.map((row) => _activity(row, (row['seedName'] ?? row['title'] ?? 'Hara beej').toString(), 'Kyari: ' + (row['kyariNumber'] ?? '-').toString())).toList()),
@@ -193,8 +214,13 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                     icon: const Icon(Icons.water_drop_outlined), label: const Text('Add Pani'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'FASAL', initialPlotId: widget.plot['id'] as String))),
-                    icon: const Icon(Icons.grass_outlined), label: const Text('Add Fasal'),
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(
+                      type: 'FASAL',
+                      initialPlotId: widget.plot['id'] as String,
+                      initialSeason: _season,
+                      initialYear: _year,
+                    ))),
+                    icon: const Icon(Icons.grass_outlined), label: const Text('Nayi Fasal Shuru Karein'),
                   ),
                   OutlinedButton.icon(
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'HARA_BEEJ', initialPlotId: widget.plot['id'] as String))),
