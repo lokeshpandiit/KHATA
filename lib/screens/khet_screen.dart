@@ -756,6 +756,8 @@ class _KhetScreenState extends State<KhetScreen> {
                     Text('Beejne ki date: ${dateLabel(DateTime.parse(row['sowingDate'] as String))}'),
                   if (row['type'] == 'FASAL' && row['harvested'] == true && row['harvestDate'] != null)
                     Text('Fasal katne ki date: ${dateLabel(DateTime.parse(row['harvestDate'] as String))}', style: const TextStyle(color: Colors.green)),
+                  if (row['type'] == 'FASAL' && row['harvested'] != true && row['plannedHarvestDate'] is String)
+                    Text('Fasal katne ki planned date: ${dateLabel(DateTime.parse(row['plannedHarvestDate'] as String))}', style: const TextStyle(color: Colors.deepOrange)),
                   if (row['type'] == 'HARA_BEEJ')
                     Text('Kyari: ${row['kyariNumber'] ?? '-'}'),
                   if (row['type'] == 'DAWAI') ...[
@@ -1322,9 +1324,12 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       lastDate: DateTime(now.year + 8),
     );
     if (picked != null && mounted) {
+      final futureHarvest = DateUtils.dateOnly(picked).isAfter(
+        DateUtils.dateOnly(now),
+      );
       setState(() {
         _harvestDate = picked;
-        _harvested = true;
+        _harvested = !futureHarvest;
       });
       await FutureDateReminderPrompt.check(
         context,
