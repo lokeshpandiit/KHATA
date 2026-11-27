@@ -917,16 +917,33 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
 
   Map<String, dynamic>? get _currentCrop {
     if (_plotId == null) return null;
+    final applicationDay = DateTime(
+      _activityDate.year,
+      _activityDate.month,
+      _activityDate.day,
+    );
+    DateTime? sowingDate(Map<String, dynamic> row) {
+      return DateTime.tryParse(
+        (row['sowingDate'] ?? row['date'] ?? '').toString(),
+      );
+    }
+
     final crops = _storage.records('khet')
         .where((row) =>
             row['type'] == 'FASAL' &&
             row['plotId'] == _plotId &&
             row['season'] == _season &&
             row['year'] == _year)
+        .where((row) {
+          final date = sowingDate(row);
+          if (date == null) return false;
+          final sowingDay = DateTime(date.year, date.month, date.day);
+          return !sowingDay.isAfter(applicationDay);
+        })
         .toList();
     crops.sort((a, b) =>
-      (DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(0))
-      .compareTo(DateTime.tryParse(a['date'] as String? ?? '') ?? DateTime(0)));
+      (sowingDate(b) ?? DateTime(0))
+      .compareTo(sowingDate(a) ?? DateTime(0)));
     return crops.isEmpty ? null : crops.first;
   }
 
