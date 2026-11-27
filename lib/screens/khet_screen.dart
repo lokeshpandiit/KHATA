@@ -247,15 +247,12 @@ class _KhetScreenState extends State<KhetScreen> {
     await KhataSharingService.share(
       phone: row['customerPhone'] as String?,
       text: [
-        'TRACTOR WORK BILL - ${_storage.senderName}',
-        'Customer: ${row['customerName'] ?? ''}',
-        'Field: ${row['farmName'] ?? ''}',
-        if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty) 'Killa: ${_plotLabel(row['plotId'])}',
-        'Work: ${row['work'] ?? ''}',
-        'Total: ₹${row['totalAmount'] ?? 0}',
-        'Paid: ₹${row['paidAmount'] ?? 0}',
-        'Pending: ₹${_balance(row).toStringAsFixed(0)}',
-        if (due != null) 'Payment due by: ${DateFormat('dd MMM yyyy').format(due)}',
+        '🚜 ट्रैक्टर का हिसाब',
+        'काम: ${row['work'] ?? ''}',
+        'कुल बिल: ₹${_amount(row['totalAmount']).toStringAsFixed(0)}',
+        'जमा: ₹${_amount(row['paidAmount']).toStringAsFixed(0)}',
+        'बाकी: ₹${_balance(row).toStringAsFixed(0)}',
+        if (due != null) 'भुगतान की अंतिम तारीख: ${DateFormat('dd MMM yyyy').format(due)}',
       ].join('\n'),
       files: files,
     );
@@ -305,38 +302,57 @@ class _KhetScreenState extends State<KhetScreen> {
 
   Future<void> _recordTractorPayment(Map<String, dynamic> row) async {
     final controller = TextEditingController();
-    final amount = await showDialog<double>(
+    String direction = 'Diya';
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Add received payment'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'Received amount (₹)'),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Payment entry'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              value: direction,
+              decoration: const InputDecoration(labelText: 'Payment type'),
+              items: const [
+                DropdownMenuItem(value: 'Diya', child: Text('💸 Paise diye')),
+                DropdownMenuItem(value: 'Liya', child: Text('💰 Paise liye')),
+              ],
+              onChanged: (v) => setDialogState(() => direction = v ?? direction),
+            ),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(labelText: direction == 'Diya' ? 'Amount given (₹)' : 'Amount received (₹)'),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                final value = double.tryParse(controller.text.trim());
+                if (value != null && value > 0) Navigator.pop(dialogContext, {'amount': value, 'direction': direction});
+              },
+              child: const Text('Save payment'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              final value = double.tryParse(controller.text.trim());
-              if (value != null && value > 0) Navigator.pop(dialogContext, value);
-            },
-            child: const Text('Save payment'),
-          ),
-        ],
       ),
     );
     controller.dispose();
-    if (amount == null) return;
+    if (result == null) return;
+    final amount = result['amount'] as double;
+    direction = result['direction'] as String;
     final total = _amount(row['totalAmount'] ?? row['price']);
     final oldPaid = _amount(row['paidAmount']);
-    final oldBalance = (total - oldPaid).clamp(0, double.infinity).toDouble();
-    if (amount > oldBalance) {
-      _error('Payment cannot be greater than pending balance ₹${oldBalance.toStringAsFixed(0)}');
+    if (direction == 'Diya' && amount > (total - oldPaid).clamp(0, double.infinity)) {
+      _error('Amount given cannot exceed pending balance ₹${(total - oldPaid).clamp(0, double.infinity).toStringAsFixed(0)}');
       return;
     }
-    final paid = oldPaid + amount;
+    if (direction == 'Liya' && amount > oldPaid) {
+      _error('Received amount cannot exceed previously given ₹${oldPaid.toStringAsFixed(0)}');
+      return;
+    }
+    final paid = direction == 'Diya' ? oldPaid + amount : oldPaid - amount;
     final balance = (total - paid).clamp(0, double.infinity).toDouble();
     final updated = Map<String, dynamic>.from(row)
       ..['paidAmount'] = paid
@@ -344,7 +360,7 @@ class _KhetScreenState extends State<KhetScreen> {
       ..['status'] = balance <= 0 ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING')
       ..['payments'] = [
         ...(row['payments'] as List? ?? const []),
-        {'amount': amount, 'date': DateTime.now().toIso8601String()},
+        {'amount': amount, 'direction': direction, 'date': DateTime.now().toIso8601String()},
       ]
       ..['updatedAt'] = DateTime.now().toIso8601String();
     await _storage.updateRecord('khet', row['id'] as String, updated);
@@ -1370,7 +1386,6 @@ class AddTractorWorkScreen extends StatefulWidget {
 
 class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
   final _storage = StorageBackupService.instance;
-  final _farm = TextEditingController();
   final _work = TextEditingController();
   final _total = TextEditingController();
   final _paid = TextEditingController(text: '0');
@@ -1384,7 +1399,6 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
 
   @override
   void dispose() {
-    _farm.dispose();
     _work.dispose();
     _total.dispose();
     _paid.dispose();
@@ -1442,8 +1456,8 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
       _error('Pick customer from phone contacts');
       return;
     }
-    if (_farm.text.trim().isEmpty || _work.text.trim().isEmpty || total <= 0 || paid < 0 || paid > total) {
-      _error('Enter field, work and valid total/paid amount');
+    if (_work.text.trim().isEmpty || total <= 0 || paid < 0 || paid > total) {
+      _error('Enter work and valid total/paid amount');
       return;
     }
     setState(() => _saving = true);
@@ -1457,7 +1471,6 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
         'customerPhone': _customerPhone,
         'plotId': _plotId,
         'contact': _customerName,
-        'farmName': _farm.text.trim(),
         'work': _work.text.trim(),
         'title': _work.text.trim(),
         'totalAmount': total,
@@ -1471,7 +1484,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
         'billPhoto': _photos.isEmpty ? null : _photos.first,
         'billPhotos': _photos,
         'note': _note.text.trim(),
-        'payments': paid > 0 ? [{'amount': paid, 'date': now.toIso8601String()}] : <Map<String, dynamic>>[],
+        'payments': paid > 0 ? [{'amount': paid, 'direction': 'Diya', 'date': now.toIso8601String()}] : <Map<String, dynamic>>[],
         'date': now.toIso8601String(),
       });
       if (mounted) Navigator.pop(context);
@@ -1493,9 +1506,6 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
           icon: const Icon(Icons.contacts_outlined),
           label: Text(_customerName == null ? 'Pick Customer from Contacts' : '$_customerName · $_customerPhone'),
         ),
-        const SizedBox(height: 12),
-        TextField(controller: _farm, textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(labelText: 'Which field / khet?')),
         const SizedBox(height: 12),
         KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
         const SizedBox(height: 12),
