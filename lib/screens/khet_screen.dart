@@ -753,6 +753,8 @@ class _KhetScreenState extends State<KhetScreen> {
                     Text('Season: ${row['season'] ?? ''} ${row['year'] ?? ''}', style: const TextStyle(fontSize: 12, color: Colors.black54)),
                   if (row['type'] == 'FASAL' && row['sowingDate'] != null)
                     Text('Beejne ki date: ${dateLabel(DateTime.parse(row['sowingDate'] as String))}'),
+                  if (row['type'] == 'FASAL' && row['harvested'] == true && row['harvestDate'] != null)
+                    Text('Fasal katne ki date: ${dateLabel(DateTime.parse(row['harvestDate'] as String))}', style: const TextStyle(color: Colors.green)),
                   if (row['type'] == 'HARA_BEEJ')
                     Text('Kyari: ${row['kyariNumber'] ?? '-'}'),
                   if (row['type'] == 'DAWAI') ...[
