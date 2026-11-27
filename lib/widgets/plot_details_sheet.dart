@@ -69,7 +69,9 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
     final details = <String>[
       if (subtitle.isNotEmpty) subtitle,
       if (row['type'] != 'PANI' && row['kyariCount'] != null)
-        'Kyari: ${row['kyariCount']} / ${row['totalKyarisSnapshot'] ?? '-'}',
+        (row['fullKilla'] == true
+            ? 'Full Killa · ${row['kyariCount']} kyari'
+            : 'Partial · ${row['kyariCount']} / ${row['totalKyarisSnapshot'] ?? '-'} kyari'),
       if (date != null) DateFormat('dd MMM yyyy').format(date),
       if (seasonYear.isNotEmpty) seasonYear,
     ].join(' · ');
