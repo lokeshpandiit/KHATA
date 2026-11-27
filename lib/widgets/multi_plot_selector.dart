@@ -81,6 +81,7 @@ class _KhetMultiPlotSelectorState extends State<KhetMultiPlotSelector> {
                     Padding(
                       padding: const EdgeInsets.only(left: 40, right: 8, bottom: 8),
                       child: DropdownButtonFormField<int>(
+                        key: ValueKey('$id-$selectedCount'),
                         initialValue: selectedCount > 0 && selectedCount <= total ? selectedCount : total,
                         isExpanded: true,
                         decoration: const InputDecoration(
