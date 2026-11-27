@@ -1080,38 +1080,16 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
           const SizedBox(height: 12),
           ],
           if (widget.initialPlotId != null) ...[
-            KhetPlotDropdown(selectedId: _plotId, onChanged: (value) {
-              setState(() { _plotId = value; _wetKyaris.clear(); });
-            }),
-            const SizedBox(height: 8),
-            Text(
-              _selectedPlot == null
-                  ? 'Killa select karein. Total kyari map ke Edit option mein set hoti hain.'
-                  : 'Is kille mein total kyari: ' + _totalKyaris.toString(),
-              style: const TextStyle(color: Colors.black54, fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _wetKyaris,
-              keyboardType: TextInputType.number,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Is baar kitni kyari bheegi?',
-                prefixIcon: Icon(Icons.water_drop_outlined),
-              ),
+            KhetMultiPlotSelector(
+              initialSelection: _selectedPlots,
+              onChanged: (value) => setState(() {
+                _selectedPlots = value;
+                _plotId = value.isEmpty ? null : value.keys.first;
+              }),
             ),
             const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Expanded(child: Text('Bheegi: ' + _wetCount.toString(), style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w700))),
-                    Expanded(child: Text('Baaki: ' + _remainingKyaris.toString(), style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w700))),
-                  ],
-                ),
-              ),
-            ),
+            const Text('Har kille mein Full Killa ya Partial kyari alag select karein. Pani ke total minutes kyari ke anupat mein bantenge.',
+                style: TextStyle(color: Colors.black54, fontSize: 12)),
             const SizedBox(height: 12),
             SeasonYearFields(
               season: _season,
