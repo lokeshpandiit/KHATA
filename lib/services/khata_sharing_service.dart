@@ -1,5 +1,5 @@
 import 'package:share_plus/share_plus.dart';
-import 'package:whatsapp_share2/whatsapp_share2.dart';
+import 'package:whatsapp_share_plus/whatsapp_share_plus.dart';
 
 class KhataSharingService {
   static String normalizePhone(String phone) {
@@ -15,22 +15,25 @@ class KhataSharingService {
     String? phone,
     List<String> files = const [],
   }) async {
-    final validFiles = files.where((path) => path.trim().isNotEmpty).toList();
+    final validFiles = files
+        .where((path) => path.trim().isNotEmpty)
+        .where((path) => XFile(path).path.isNotEmpty)
+        .toSet()
+        .toList();
     final target = phone == null ? '' : normalizePhone(phone);
 
     if (target.isNotEmpty) {
-      final installed = await WhatsappShare.isInstalled();
-      if (installed == true) {
-        if (validFiles.isEmpty) {
-          await WhatsappShare.share(phone: target, text: text);
-        } else {
-          await WhatsappShare.shareFile(
-            phone: target,
+      try {
+        if (await WhatsAppShare.isInstalled()) {
+          await WhatsAppShare.share(
             text: text,
-            filePath: validFiles,
+            phone: target,
+            files: validFiles.map(ShareFile.fromPath).toList(),
           );
+          return;
         }
-        return;
+      } catch (_) {
+        // Fall back to Android's regular share sheet if WhatsApp cannot handle it.
       }
     }
 
