@@ -181,86 +181,58 @@ class _KhataHomeState extends State<KhataHome> {
 
   Future<void> _showFarmSettings() async {
     final prefs = await SharedPreferences.getInstance();
-    final day = prefs.getInt('farm_water_turn_day') ?? -1;
-    final startHour = prefs.getInt('farm_water_turn_start_hour') ?? 6;
-    final startMinute = prefs.getInt('farm_water_turn_start_minute') ?? 0;
-    final endHour = prefs.getInt('farm_water_turn_end_hour') ?? 10;
-    final endMinute = prefs.getInt('farm_water_turn_end_minute') ?? 0;
-    final defaultMinutes = prefs.getInt('farm_water_default_minutes') ?? 0;
-    final season = prefs.getString('farm_default_season') ?? 'Rabi';
-    final year = prefs.getInt('farm_default_year') ?? DateTime.now().year;
-    final minuteController = TextEditingController(text: defaultMinutes == 0 ? '' : defaultMinutes.toString());
-    var selectedDay = day;
-    var from = TimeOfDay(hour: startHour, minute: startMinute);
-    var to = TimeOfDay(hour: endHour, minute: endMinute);
-    var selectedSeason = season;
-    var selectedYear = year;
-    String timeLabel(TimeOfDay t) => t.format(context);
-    Future<TimeOfDay?> pickTime(TimeOfDay initial) => showTimePicker(context: context, initialTime: initial);
+    var from = TimeOfDay(
+      hour: prefs.getInt('farm_water_turn_start_hour') ?? 12,
+      minute: prefs.getInt('farm_water_turn_start_minute') ?? 0,
+    );
+    var to = TimeOfDay(
+      hour: prefs.getInt('farm_water_turn_end_hour') ?? 13,
+      minute: prefs.getInt('farm_water_turn_end_minute') ?? 0,
+    );
+    final received = TextEditingController(
+      text: prefs.getString('pani_received_message') ?? 'Maine {naam} se {minute} minute pani liya. Date: {date}',
+    );
+    final given = TextEditingController(
+      text: prefs.getString('pani_given_message') ?? 'Maine {naam} ko {minute} minute pani diya. Date: {date}',
+    );
+    String label(TimeOfDay t) => t.format(context);
+    Future<TimeOfDay?> pick(TimeOfDay t) => showTimePicker(context: context, initialTime: t);
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Farm Defaults / Settings'),
+          title: const Text('Settings'),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              DropdownButtonFormField<int>(
-                value: selectedDay,
-                decoration: const InputDecoration(labelText: 'Nahar ki baari ka din (optional)'),
-                items: const [
-                  DropdownMenuItem(value: -1, child: Text('Set nahi kiya')),
-                  DropdownMenuItem(value: 1, child: Text('Monday')),
-                  DropdownMenuItem(value: 2, child: Text('Tuesday')),
-                  DropdownMenuItem(value: 3, child: Text('Wednesday')),
-                  DropdownMenuItem(value: 4, child: Text('Thursday')),
-                  DropdownMenuItem(value: 5, child: Text('Friday')),
-                  DropdownMenuItem(value: 6, child: Text('Saturday')),
-                  DropdownMenuItem(value: 7, child: Text('Sunday')),
-                ],
-                onChanged: (v) => setDialogState(() => selectedDay = v ?? -1),
-              ),
-              const SizedBox(height: 8),
+              const Text('Nahar ki baari ka time', style: TextStyle(fontWeight: FontWeight.w700)),
               Row(children: [
-                Expanded(child: OutlinedButton(onPressed: () async { final v = await pickTime(from); if (v != null) setDialogState(() => from = v); }, child: Text('From: ${timeLabel(from)}'))),
+                Expanded(child: OutlinedButton(onPressed: () async { final v=await pick(from); if(v!=null)setDialogState(()=>from=v); }, child: Text('From: ${label(from)}'))),
                 const SizedBox(width: 8),
-                Expanded(child: OutlinedButton(onPressed: () async { final v = await pickTime(to); if (v != null) setDialogState(() => to = v); }, child: Text('To: ${timeLabel(to)}'))),
+                Expanded(child: OutlinedButton(onPressed: () async { final v=await pick(to); if(v!=null)setDialogState(()=>to=v); }, child: Text('To: ${label(to)}'))),
               ]),
-              const SizedBox(height: 8),
-              TextField(controller: minuteController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Default water minutes (optional)')),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: selectedSeason,
-                decoration: const InputDecoration(labelText: 'Default season'),
-                items: const ['Rabi','Kharif'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
-                onChanged: (v) => setDialogState(() => selectedSeason = v ?? selectedSeason),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<int>(
-                value: selectedYear,
-                decoration: const InputDecoration(labelText: 'Default year'),
-                items: List.generate(9, (i) => DateTime.now().year - 3 + i).map((v) => DropdownMenuItem(value: v, child: Text(v.toString()))).toList(),
-                onChanged: (v) => setDialogState(() => selectedYear = v ?? selectedYear),
-              ),
+              const SizedBox(height: 16),
+              TextField(controller: received, maxLines: 3, decoration: const InputDecoration(labelText: 'Default message — Pani liya', helperText: 'Placeholders: {naam}, {minute}, {date}')),
+              const SizedBox(height: 12),
+              TextField(controller: given, maxLines: 3, decoration: const InputDecoration(labelText: 'Default message — Pani diya', helperText: 'Placeholders: {naam}, {minute}, {date}')),
             ]),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
             FilledButton(onPressed: () async {
-              await prefs.setInt('farm_water_turn_day', selectedDay);
               await prefs.setInt('farm_water_turn_start_hour', from.hour);
               await prefs.setInt('farm_water_turn_start_minute', from.minute);
               await prefs.setInt('farm_water_turn_end_hour', to.hour);
               await prefs.setInt('farm_water_turn_end_minute', to.minute);
-              await prefs.setInt('farm_water_default_minutes', int.tryParse(minuteController.text.trim()) ?? 0);
-              await prefs.setString('farm_default_season', selectedSeason);
-              await prefs.setInt('farm_default_year', selectedYear);
-              if (mounted) Navigator.pop(dialogContext);
+              await prefs.setString('pani_received_message', received.text.trim());
+              await prefs.setString('pani_given_message', given.text.trim());
+              if(mounted)Navigator.pop(dialogContext);
             }, child: const Text('Save')),
           ],
         ),
       ),
     );
-    minuteController.dispose();
+    received.dispose();
+    given.dispose();
   }
 
   @override

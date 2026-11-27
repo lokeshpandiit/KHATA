@@ -186,16 +186,24 @@ class _KhetScreenState extends State<KhetScreen> {
     );
     if (confirmed != true) return;
 
+    final prefs = await SharedPreferences.getInstance();
+    final template = prefs.getString(row['direction'] == 'Liya' ? 'pani_received_message' : 'pani_given_message') ??
+        (row['direction'] == 'Liya' ? 'Maine {naam} se {minute} minute pani liya. Date: {date}' : 'Maine {naam} ko {minute} minute pani diya. Date: {date}');
+    final contactName = (row['contact'] ?? 'samne wale').toString();
+    final minuteText = formatMinutes((row['minutes'] as num?)?.toInt() ?? 0);
+    final dateText = date == null ? '' : dateLabel(date);
+    final customized = template
+        .replaceAll('{naam}', contactName)
+        .replaceAll('{minute}', minuteText)
+        .replaceAll('{date}', dateText);
     await KhataSharingService.share(
       phone: phone,
       text: [
-        'Pani Hisab - ${_storage.senderName}',
+        customized,
         'Source: ${row['source']}',
-        'Kaam: ${row['direction']} / ${formatMinutes((row['minutes'] as num?)?.toInt() ?? 0)}',
         if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty) 'Killa: ${_plotLabel(row['plotId'])}',
         if (row['wetKyaris'] != null) 'Kyari: ${row['wetKyaris']} bheegi, ${row['remainingKyaris']} baaki',
         if (row['season'] != null || row['year'] != null) 'Season: ${row['season'] ?? ''} ${row['year'] ?? ''}',
-        if (date != null) 'Date: ${dateLabel(date)}',
         if (includeNote && note.isNotEmpty) 'Note: $note',
       ].join('\n'),
     );
