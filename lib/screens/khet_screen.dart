@@ -230,9 +230,9 @@ class _KhetScreenState extends State<KhetScreen> {
             ),
           ),
         ),
-      ));
+      );
     }
-    if (cards.isEmpty) {
+    if (cards.isEmpty {
       return const Padding(
         padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
         child: Align(
