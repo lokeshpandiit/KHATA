@@ -708,6 +708,20 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
     super.initState();
     _plotId = widget.initialPlotId;
     if (_contacts.isNotEmpty) _contactId = _contacts.first['id'] as String;
+    _loadDefaultOwnDuration();
+  }
+
+  Future<void> _loadDefaultOwnDuration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final start = (prefs.getInt('farm_water_turn_start_hour') ?? 12) * 60 +
+        (prefs.getInt('farm_water_turn_start_minute') ?? 0);
+    final end = (prefs.getInt('farm_water_turn_end_hour') ?? 13) * 60 +
+        (prefs.getInt('farm_water_turn_end_minute') ?? 0);
+    final duration = (end - start + 1440) % 1440;
+    if (duration > 0 && _ownMinutes.text.trim().isEmpty) {
+      _ownMinutes.text = duration.toString();
+      if (mounted) setState(() {});
+    }
   }
 
   @override
@@ -763,7 +777,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
     final ownMinutes = int.tryParse(_ownMinutes.text.trim()) ?? 0;
     final borrowedMinutes = int.tryParse(_borrowedMinutes.text.trim()) ?? 0;
     final minutes = plotMode ? ownMinutes + (_borrowedWater ? borrowedMinutes : 0) : (int.tryParse(_minutes.text.trim()) ?? 0);
-    if (minutes <= 0) {
+    if (!plotMode && minutes <= 0) {
       _error('Enter a valid number of minutes');
       return;
     }
@@ -918,11 +932,13 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
             ),
             const SizedBox(height: 12),
             TextField(controller: _ownMinutes, keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Apne pani ke minutes')),
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Apni baari ke minutes (optional)')),
             if (_borrowedWater) ...[
               const SizedBox(height: 12),
               TextField(controller: _borrowedMinutes, keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Dusre se extra liye pani ke minutes')),
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'Dusre se liye pani ke minutes (required)')),
             ],
             const SizedBox(height: 8),
             Text('Total: ' + formatMinutes((int.tryParse(_ownMinutes.text) ?? 0) + (_borrowedWater ? (int.tryParse(_borrowedMinutes.text) ?? 0) : 0))),
