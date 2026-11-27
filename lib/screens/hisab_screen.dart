@@ -36,7 +36,7 @@ class _HisabScreenState extends State<HisabScreen> {
 
   Future<void> _addHisab() async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => AddHisabScreen(initialCategory: _category == 'Len-Den' ? 'Len-Den' : 'Khet')),
+      MaterialPageRoute<void>(builder: (_) => AddHisabScreen(initialCategory: _category == 'All' ? 'Khet' : _category)),
     );
     if (mounted) setState(() {});
   }
@@ -54,7 +54,8 @@ class _HisabScreenState extends State<HisabScreen> {
     final query = _search.text.trim().toLowerCase();
     return _rows.where((row) {
       final date = DateTime.tryParse(row['date'] as String? ?? '');
-      final categoryMatch = _category == 'All' || row['category'] == _category;
+      final knownCategories = ['Khet', 'Studio', 'Len-Den'];
+      final categoryMatch = _category == 'All' || (_category == 'Other' ? !(knownCategories.contains(row['category']) || row['category'] == 'Other') : row['category'] == _category);
       final monthMatch = _month == 'All months' ||
           (date != null && monthKey(date) == _month);
       final searchable =
@@ -253,6 +254,7 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
   final _note = TextEditingController();
   final _personName = TextEditingController();
   final _personPhone = TextEditingController();
+  final _customCategory = TextEditingController();
   final List<String> _photos = [];
   late String _category = widget.initialCategory;
   String _direction = 'RECEIVED';
@@ -268,6 +270,7 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
     _note.dispose();
     _personName.dispose();
     _personPhone.dispose();
+    _customCategory.dispose();
     _recorder.dispose();
     super.dispose();
   }
@@ -352,7 +355,7 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
       final now = DateTime.now();
       await _storage.addRecord('hisabs', {
         'id': now.microsecondsSinceEpoch.toString(),
-        'category': _category,
+        'category': _category == 'Custom' ? _customCategory.text.trim() : _category,
         'title': _title.text.trim(),
         'amount': _amount.text.trim(),
         'direction': _direction,
@@ -375,7 +378,8 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final showPerson = _category == 'Len-Den' || _category == 'Studio';
+    final effectiveCategory = _category == 'Custom' ? _customCategory.text.trim() : _category;
+    final showPerson = effectiveCategory == 'Len-Den' || effectiveCategory == 'Studio';
     return Scaffold(
       appBar: AppBar(title: const Text('Add New Hisab')),
       body: ListView(
@@ -384,9 +388,15 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
           DropdownButtonFormField<String>(
             initialValue: _category,
             decoration: const InputDecoration(labelText: 'Category'),
-            items: ['Khet', 'Studio', 'Len-Den', 'Other']
+            items: ['Khet', 'Studio', 'Len-Den', 'Other', 'Custom']
                 .map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
             onChanged: (value) => setState(() => _category = value ?? _category),
+          ),
+          if (_category == 'Custom') ...[
+            const SizedBox(height: 10),
+            TextField(controller: _customCategory, textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Apni category ka naam likhein', hintText: 'Jaise: Ghar, Personal, Repair, Udhaar')),
+          ],
           ),
           const SizedBox(height: 12),
           TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title (optional)')),
