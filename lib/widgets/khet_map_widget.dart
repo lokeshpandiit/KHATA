@@ -153,10 +153,11 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
                   Image.asset('assets/khet_map.jpg', fit: BoxFit.fill),
                   for (final plot in plots)
                     Positioned(
-                      left: width * (left + (plot['column'] as num).toDouble() * cellWidth),
-                      top: height * (top + (plot['row'] as num).toDouble() * cellHeight),
-                      width: width * cellWidth,
-                      height: height * cellHeight,
+                      // Expand the tap target around each plot center without moving its label.
+                      left: width * (left + (plot['column'] as num).toDouble() * cellWidth - cellWidth * 0.17),
+                      top: height * (top + (plot['row'] as num).toDouble() * cellHeight - cellHeight * 0.17),
+                      width: width * cellWidth * 1.34,
+                      height: height * cellHeight * 1.34,
                       child: Material(
                         color: Colors.transparent,
                         child: InkWell(
