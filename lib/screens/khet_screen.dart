@@ -867,6 +867,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
     _ownMinutes.dispose();
     _borrowedMinutes.dispose();
     _note.dispose();
+    _ownerNameController.dispose();
     super.dispose();
   }
 
@@ -1816,6 +1817,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
   final _total = TextEditingController();
   final _paid = TextEditingController(text: '0');
   final _note = TextEditingController();
+  final _ownerNameController = TextEditingController();
   final _photos = <String>[];
   String? _customerName;
   String? _customerPhone;
@@ -1842,6 +1844,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
       if (picked != null && mounted) {
         setState(() {
           _customerName = picked['name'];
+          _ownerNameController.text = picked['name'] ?? '';
           _customerPhone = picked['phone'];
         });
       }
@@ -1878,8 +1881,9 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
   Future<void> _save() async {
     final total = double.tryParse(_total.text.trim()) ?? 0;
     final paid = double.tryParse(_paid.text.trim()) ?? 0;
-    if ((_customerName ?? '').isEmpty || (_customerPhone ?? '').isEmpty) {
-      _error('Pick customer from phone contacts');
+    _customerName = _ownerNameController.text.trim();
+    if ((_customerName ?? '').isEmpty) {
+      _error('Tractor malik ka naam likhein ya contact se select karein');
       return;
     }
     if (_work.text.trim().isEmpty || total <= 0 || paid < 0 || paid > total) {
@@ -1894,7 +1898,8 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
         'id': now.microsecondsSinceEpoch.toString(),
         'type': 'TRACTOR',
         'customerName': _customerName,
-        'customerPhone': _customerPhone,
+        'ownerName': _customerName,
+        'customerPhone': (_customerPhone ?? '').trim().isEmpty ? null : _customerPhone,
         'plotId': _plotId,
         'contact': _customerName,
         'work': _work.text.trim(),
@@ -1927,10 +1932,23 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
     body: ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        TextField(
+          controller: _ownerNameController,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Tractor malik ka naam',
+            hintText: 'Naam manually likhein',
+            prefixIcon: Icon(Icons.person_outline),
+          ),
+          onChanged: (value) => _customerName = value.trim(),
+        ),
+        const SizedBox(height: 8),
         OutlinedButton.icon(
           onPressed: _pickCustomer,
           icon: const Icon(Icons.contacts_outlined),
-          label: Text(_customerName == null ? 'Pick Customer from Contacts' : '$_customerName · $_customerPhone'),
+          label: Text(_customerPhone == null || _customerPhone!.isEmpty
+              ? 'Contact se Tractor Malik select karein'
+              : 'Contact: $_customerName · $_customerPhone'),
         ),
         const SizedBox(height: 12),
         KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
