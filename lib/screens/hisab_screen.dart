@@ -1,15 +1,16 @@
 import 'dart:io';
 
-import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:record/record.dart';
-import 'package:share_plus/share_plus.dart';
 
+import '../services/contact_picker_service.dart';
+import '../services/khata_sharing_service.dart';
 import '../services/storage_backup_service.dart';
 import '../widgets/khata_widgets.dart';
+import '../widgets/voice_note_player.dart';
 
 class HisabScreen extends StatefulWidget {
   const HisabScreen({super.key});
@@ -23,14 +24,12 @@ class _HisabScreenState extends State<HisabScreen> {
   final _search = TextEditingController();
   String _category = 'All';
   String _month = 'All months';
-  final _player = AudioPlayer();
 
   List<Map<String, dynamic>> get _rows => _storage.records('hisabs');
 
   @override
   void dispose() {
     _search.dispose();
-    _player.dispose();
     super.dispose();
   }
 
@@ -41,6 +40,15 @@ class _HisabScreenState extends State<HisabScreen> {
     if (mounted) setState(() {});
   }
 
+  List<String> _photos(Map<String, dynamic> row) {
+    final paths = (row['photos'] as List? ?? const []).whereType<String>().toList();
+    final legacy = row['photo'];
+    if (legacy is String && legacy.isNotEmpty && !paths.contains(legacy)) {
+      paths.insert(0, legacy);
+    }
+    return paths.where((path) => File(path).existsSync()).toList();
+  }
+
   List<Map<String, dynamic>> get _filtered {
     final query = _search.text.trim().toLowerCase();
     return _rows.where((row) {
@@ -49,7 +57,7 @@ class _HisabScreenState extends State<HisabScreen> {
       final monthMatch = _month == 'All months' ||
           (date != null && monthKey(date) == _month);
       final searchable =
-          '${row['title'] ?? ''} ${row['note'] ?? ''} ${row['category'] ?? ''}'
+          '${row['title'] ?? ''} ${row['note'] ?? ''} ${row['category'] ?? ''} ${row['personName'] ?? ''}'
               .toLowerCase();
       return categoryMatch && monthMatch && searchable.contains(query);
     }).toList()
@@ -57,26 +65,50 @@ class _HisabScreenState extends State<HisabScreen> {
   }
 
   Future<void> _share(Map<String, dynamic> row) async {
+    final mode = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Wrap(children: [
+          const ListTile(title: Text('Choose what to share', style: TextStyle(fontWeight: FontWeight.w800))),
+          ListTile(leading: const Icon(Icons.text_fields), title: const Text('Only text'), onTap: () => Navigator.pop(sheetContext, 'text')),
+          ListTile(leading: const Icon(Icons.image_outlined), title: const Text('Text + images'), onTap: () => Navigator.pop(sheetContext, 'images')),
+          ListTile(leading: const Icon(Icons.mic_none), title: const Text('Text + voice note'), onTap: () => Navigator.pop(sheetContext, 'voice')),
+          ListTile(leading: const Icon(Icons.attach_file), title: const Text('Text + images + voice note'), onTap: () => Navigator.pop(sheetContext, 'all')),
+        ]),
+      ),
+    );
+    if (mode == null) return;
     final date = DateTime.tryParse(row['date'] as String? ?? '');
-    final lines = <String>[
-      'Hisab - ${_storage.senderName}',
-      if ((row['category'] as String? ?? '').isNotEmpty)
-        'Category: ${row['category']}',
+    final direction = row['direction'] == 'PAID' ? 'PAID / GIVEN (−)' : 'RECEIVED (+)';
+    final text = [
+      'KHATA - ${_storage.senderName}',
+      'Category: ${row['category'] ?? ''}',
+      if ((row['personName'] as String? ?? '').isNotEmpty) 'Person: ${row['personName']}',
       if ((row['title'] as String? ?? '').isNotEmpty) 'Title: ${row['title']}',
-      if ((row['amount'] as String? ?? '').isNotEmpty)
-        'Amount: ₹${row['amount']}',
+      if ((row['amount'] as String? ?? '').isNotEmpty) 'Amount: ${row['direction'] == 'PAID' ? '−' : '+'}₹${row['amount']}',
+      if (row['category'] == 'Len-Den' || row['category'] == 'Studio') 'Type: $direction',
       if ((row['note'] as String? ?? '').isNotEmpty) 'Note: ${row['note']}',
       if (date != null) 'Date: ${dateLabel(date)}',
+    ].join('\n');
+    final photos = mode == 'images' || mode == 'all' ? _photos(row) : <String>[];
+    final voice = mode == 'voice' || mode == 'all' ? row['voice'] as String? : null;
+    final callRecording = mode == 'voice' || mode == 'all' ? row['callRecording'] as String? : null;
+    final files = [
+      ...photos,
+      if (voice != null && File(voice).existsSync()) voice,
+      if (callRecording != null && File(callRecording).existsSync()) callRecording,
     ];
-    final paths = [
-      row['photo'] as String?,
-      row['voice'] as String?,
-      row['callRecording'] as String?,
-    ].whereType<String>().where((path) => File(path).existsSync()).toList();
-    await Share.shareXFiles(
-      paths.map(XFile.new).toList(),
-      text: lines.join('\n'),
-    );
+    try {
+      await KhataSharingService.share(
+        text: text,
+        phone: row['personPhone'] as String?,
+        files: files,
+      );
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not share record: $error')),
+      );
+    }
   }
 
   @override
@@ -106,8 +138,7 @@ class _HisabScreenState extends State<HisabScreen> {
                               child: ChoiceChip(
                                 label: Text(item),
                                 selected: _category == item,
-                                onSelected: (_) =>
-                                    setState(() => _category = item),
+                                onSelected: (_) => setState(() => _category = item),
                               ),
                             ))
                         .toList(),
@@ -141,79 +172,56 @@ class _HisabScreenState extends State<HisabScreen> {
       final key = date == null ? 'Date unavailable' : dateLabel(date);
       groups.putIfAbsent(key, () => []).add(row);
     }
-    return groups.entries.expand((entry) {
-      return [
-        Padding(
-          padding: const EdgeInsets.only(top: 14, bottom: 6),
-          child: Text(
-            entry.key,
-            style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF176B52)),
-          ),
-        ),
-        ...entry.value.map(_hisabCard),
-      ];
-    }).toList();
+    return groups.entries.expand((entry) => [
+      Padding(
+        padding: const EdgeInsets.only(top: 14, bottom: 6),
+        child: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF176B52))),
+      ),
+      ...entry.value.map(_hisabCard),
+    ]).toList();
   }
 
   Widget _hisabCard(Map<String, dynamic> row) {
+    final amount = row['amount']?.toString() ?? '';
+    final isPaid = row['direction'] == 'PAID';
+    final photos = _photos(row);
     final voice = row['voice'] as String?;
-    final amount = row['amount'] as String? ?? '';
+    final person = (row['personName'] as String? ?? '').trim();
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    (row['title'] as String? ?? '').isEmpty
-                        ? row['category'] as String? ?? 'Hisab'
-                        : row['title'] as String,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                ),
-                if (amount.isNotEmpty)
-                  Text('₹$amount', style: const TextStyle(fontWeight: FontWeight.w800)),
-                IconButton(
-                  tooltip: 'Share',
-                  onPressed: () => _share(row),
-                  icon: const Icon(Icons.share_outlined),
-                ),
-              ],
-            ),
-            Text(row['category'] as String? ?? 'Other',
-                style: const TextStyle(color: Colors.black54)),
-            if ((row['note'] as String? ?? '').isNotEmpty) ...[
-              const SizedBox(height: 7),
-              Text(row['note'] as String),
-            ],
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                if ((row['photo'] as String? ?? '').isNotEmpty)
-                  InkWell(
-                    onTap: () => _preview(row['photo'] as String),
-                    child: mediaThumbnail(row['photo'] as String),
-                  ),
-                if (voice != null && voice.isNotEmpty)
-                  OutlinedButton.icon(
-                    onPressed: () => _player.play(DeviceFileSource(voice)),
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Voice note'),
-                  ),
-                if ((row['callRecording'] as String? ?? '').isNotEmpty)
-                  const Chip(
-                    avatar: Icon(Icons.call, size: 18),
-                    label: Text('Call recording'),
-                  ),
-              ],
-            ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(
+              (row['title'] as String? ?? '').isEmpty ? row['category'] as String? ?? 'Hisab' : row['title'] as String,
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            )),
+            if (amount.isNotEmpty)
+              Text('${isPaid ? '−' : '+'}₹$amount',
+                style: TextStyle(color: isPaid ? Colors.red : Colors.green, fontWeight: FontWeight.w900, fontSize: 16)),
+            IconButton(tooltip: 'Share', onPressed: () => _share(row), icon: const Icon(Icons.share_outlined)),
+          ]),
+          if (person.isNotEmpty)
+            Text('Person: $person${(row['personPhone'] as String? ?? '').isEmpty ? '' : ' · ${row['personPhone']}'}',
+              style: const TextStyle(color: Colors.black54)),
+          Text(row['category'] as String? ?? 'Other', style: const TextStyle(color: Colors.black54)),
+          if ((row['note'] as String? ?? '').isNotEmpty) ...[
+            const SizedBox(height: 7), Text(row['note'] as String),
           ],
-        ),
+          if (photos.isNotEmpty) ...[
+            const SizedBox(height: 9),
+            Wrap(spacing: 7, runSpacing: 7, children: photos.map((path) => InkWell(
+              onTap: () => _preview(path), child: mediaThumbnail(path, size: 76),
+            )).toList()),
+          ],
+          if (voice != null && voice.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            VoiceNotePlayer(path: voice),
+          ],
+          if ((row['callRecording'] as String? ?? '').isNotEmpty)
+            const Chip(avatar: Icon(Icons.call, size: 18), label: Text('Call recording attached')),
+        ]),
       ),
     );
   }
@@ -221,9 +229,7 @@ class _HisabScreenState extends State<HisabScreen> {
   void _preview(String path) {
     showDialog<void>(
       context: context,
-      builder: (context) => Dialog(
-        child: InteractiveViewer(child: Image.file(File(path))),
-      ),
+      builder: (context) => Dialog(child: InteractiveViewer(child: Image.file(File(path)))),
     );
   }
 }
@@ -242,8 +248,11 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
   final _title = TextEditingController();
   final _amount = TextEditingController();
   final _note = TextEditingController();
+  final _personName = TextEditingController();
+  final _personPhone = TextEditingController();
+  final List<String> _photos = [];
   String _category = 'Khet';
-  String? _photo;
+  String _direction = 'RECEIVED';
   String? _voice;
   String? _callRecording;
   bool _recording = false;
@@ -254,18 +263,38 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
     _title.dispose();
     _amount.dispose();
     _note.dispose();
+    _personName.dispose();
+    _personPhone.dispose();
     _recorder.dispose();
     super.dispose();
   }
 
-  Future<void> _pickPhoto(ImageSource source) async {
+  Future<void> _pickContact() async {
     try {
-      final image = await _picker.pickImage(source: source, imageQuality: 88);
-      if (image == null) return;
-      final permanent = await _storage.keepFile(image.path, folder: 'Photos');
-      setState(() => _photo = permanent);
+      final picked = await ContactPickerService.pickPhoneContact();
+      if (picked == null) return;
+      if (!mounted) return;
+      setState(() {
+        _personName.text = picked['name']!;
+        _personPhone.text = picked['phone']!;
+      });
     } catch (error) {
-      _error('Could not save photo: $error');
+      _error('Could not pick contact: $error');
+    }
+  }
+
+  Future<void> _pickPhotos(ImageSource source) async {
+    try {
+      final images = source == ImageSource.gallery
+          ? await _picker.pickMultiImage(imageQuality: 88)
+          : [if (await _picker.pickImage(source: source, imageQuality: 88) case final image?) image];
+      for (final image in images) {
+        final permanent = await _storage.keepFile(image.path, folder: 'Photos');
+        if (!_photos.contains(permanent)) _photos.add(permanent);
+      }
+      if (mounted) setState(() {});
+    } catch (error) {
+      _error('Could not save photos: $error');
     }
   }
 
@@ -274,9 +303,8 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
       final picked = await FilePicker.platform.pickFiles(type: FileType.audio);
       final path = picked?.files.single.path;
       if (path == null) return;
-      final permanent =
-          await _storage.keepFile(path, folder: 'CallRecordings');
-      setState(() => _callRecording = permanent);
+      final permanent = await _storage.keepFile(path, folder: 'CallRecordings');
+      if (mounted) setState(() => _callRecording = permanent);
     } catch (error) {
       _error('Could not save call recording: $error');
     }
@@ -288,11 +316,11 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
         final path = await _recorder.stop();
         if (path != null) {
           final permanent = await _storage.keepFile(path, folder: 'VoiceNotes');
-          setState(() {
+          if (mounted) setState(() {
             _voice = permanent;
             _recording = false;
           });
-        } else {
+        } else if (mounted) {
           setState(() => _recording = false);
         }
       } else {
@@ -301,20 +329,18 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
           return;
         }
         final temp = await Directory.systemTemp.createTemp('khata_voice_');
-        final path =
-            '${temp.path}/${DateTime.now().millisecondsSinceEpoch}.m4a';
-        await _recorder.start(const RecordConfig(), path: path);
-        setState(() => _recording = true);
+        final path = '${temp.path}/${DateTime.now().millisecondsSinceEpoch}.m4a';
+        await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc), path: path);
+        if (mounted) setState(() => _recording = true);
       }
     } catch (error) {
       _error('Could not record voice note: $error');
+      if (mounted) setState(() => _recording = false);
     }
   }
 
   void _error(String message) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-    }
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _save() async {
@@ -326,8 +352,12 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
         'category': _category,
         'title': _title.text.trim(),
         'amount': _amount.text.trim(),
+        'direction': _direction,
+        'personName': _personName.text.trim(),
+        'personPhone': _personPhone.text.trim(),
         'note': _note.text.trim(),
-        'photo': _photo,
+        'photo': _photos.isEmpty ? null : _photos.first,
+        'photos': _photos,
         'voice': _voice,
         'callRecording': _callRecording,
         'date': now.toIso8601String(),
@@ -342,77 +372,79 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final showPerson = _category == 'Len-Den' || _category == 'Studio';
     return Scaffold(
       appBar: AppBar(title: const Text('Add New Hisab')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           DropdownButtonFormField<String>(
-            value: _category,
+            initialValue: _category,
             decoration: const InputDecoration(labelText: 'Category'),
             items: ['Khet', 'Studio', 'Len-Den', 'Other']
-                .map((item) => DropdownMenuItem(value: item, child: Text(item)))
-                .toList(),
+                .map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
             onChanged: (value) => setState(() => _category = value ?? _category),
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _title,
-            decoration: const InputDecoration(labelText: 'Title (optional)'),
-          ),
+          TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title (optional)')),
           const SizedBox(height: 12),
-          TextField(
-            controller: _amount,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Amount (₹, optional)'),
-          ),
+          if (showPerson) ...[
+            TextField(controller: _personName, textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Person name')),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(onPressed: _pickContact, icon: const Icon(Icons.contacts_outlined),
+              label: const Text('Pick from phone contacts')),
+            if (_personPhone.text.isNotEmpty)
+              Text('Phone: ${_personPhone.text}', style: const TextStyle(color: Colors.black54)),
+            const SizedBox(height: 12),
+          ],
+          TextField(controller: _amount, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Amount (₹, optional)')),
+          if (showPerson) ...[
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: _direction,
+              decoration: const InputDecoration(labelText: 'Money direction'),
+              items: const [
+                DropdownMenuItem(value: 'RECEIVED', child: Text('Paise mile (+)')),
+                DropdownMenuItem(value: 'PAID', child: Text('Paise diye (−)')),
+              ],
+              onChanged: (value) => setState(() => _direction = value ?? _direction),
+            ),
+          ],
           const SizedBox(height: 12),
-          TextField(
-            controller: _note,
-            minLines: 3,
-            maxLines: 5,
-            decoration: const InputDecoration(labelText: 'Text note (optional)'),
-          ),
+          TextField(controller: _note, minLines: 3, maxLines: 5,
+            decoration: const InputDecoration(labelText: 'Text note (optional)')),
           const SizedBox(height: 18),
           const Text('Attachments', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _pickPhoto(ImageSource.camera),
-                icon: const Icon(Icons.camera_alt_outlined),
-                label: const Text('Camera'),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _pickPhoto(ImageSource.gallery),
-                icon: const Icon(Icons.photo_library_outlined),
-                label: const Text('Gallery'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _toggleRecording,
-                icon: Icon(_recording ? Icons.stop : Icons.mic_none),
-                label: Text(_recording ? 'Stop recording' : 'Voice note'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _pickCallRecording,
-                icon: const Icon(Icons.call),
-                label: const Text('Call recording'),
-              ),
-            ],
-          ),
-          if (_photo != null) ...[
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton.icon(onPressed: () => _pickPhotos(ImageSource.camera),
+              icon: const Icon(Icons.camera_alt_outlined), label: const Text('Camera')),
+            OutlinedButton.icon(onPressed: () => _pickPhotos(ImageSource.gallery),
+              icon: const Icon(Icons.photo_library_outlined), label: const Text('Add multiple photos')),
+            OutlinedButton.icon(onPressed: _toggleRecording,
+              icon: Icon(_recording ? Icons.stop : Icons.mic_none),
+              label: Text(_recording ? 'Stop recording' : 'Voice note')),
+            OutlinedButton.icon(onPressed: _pickCallRecording,
+              icon: const Icon(Icons.call), label: const Text('Call recording')),
+          ]),
+          if (_photos.isNotEmpty) ...[
             const SizedBox(height: 12),
-            Row(
+            Wrap(spacing: 7, runSpacing: 7, children: _photos.map((path) => Stack(
+              alignment: Alignment.topRight,
               children: [
-                mediaThumbnail(_photo),
-                const SizedBox(width: 8),
-                const Text('Photo saved permanently'),
+                mediaThumbnail(path, size: 76),
+                IconButton(visualDensity: VisualDensity.compact,
+                  onPressed: () => setState(() => _photos.remove(path)),
+                  icon: const Icon(Icons.cancel, color: Colors.red)),
               ],
-            ),
+            )).toList()),
           ],
-          if (_voice != null) const ListTile(leading: Icon(Icons.mic), title: Text('Voice note saved')),
+          if (_voice != null) ...[
+            const SizedBox(height: 8),
+            VoiceNotePlayer(path: _voice!),
+          ],
           if (_callRecording != null)
             const ListTile(leading: Icon(Icons.call), title: Text('Call recording saved')),
           const SizedBox(height: 24),
@@ -422,17 +454,11 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
             label: Text(_saving ? 'Saving…' : 'Save Hisab'),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'All fields are optional. Save even an attachment-only entry.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.black54, fontSize: 12),
-          ),
+          const Text('All fields are optional. Save even an attachment-only entry.',
+            textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, fontSize: 12)),
           const SizedBox(height: 10),
-          Text(
-            'Created ${DateFormat('d MMM yyyy, h:mm a').format(DateTime.now())}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.black45, fontSize: 12),
-          ),
+          Text('Created ${DateFormat('d MMM yyyy, h:mm a').format(DateTime.now())}',
+            textAlign: TextAlign.center, style: const TextStyle(color: Colors.black45, fontSize: 12)),
         ],
       ),
     );
