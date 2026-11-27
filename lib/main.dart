@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/documents_screen.dart';
 import 'screens/hisab_screen.dart';
 import 'screens/khet_screen.dart';
+import 'screens/history_screen.dart';
 import 'services/storage_backup_service.dart';
 
 Future<void> main() async {
@@ -92,6 +93,14 @@ class _KhataHomeState extends State<KhataHome> {
                 _notify(_storage.restoreFromDrive, 'Backup restored');
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('Settings'),
+              onTap: () {
+                Navigator.pop(context);
+                _showSettings();
+              },
+            ),
           ],
         ),
       ),
@@ -168,7 +177,7 @@ class _KhataHomeState extends State<KhataHome> {
 
   @override
   Widget build(BuildContext context) {
-    final titles = ['HISAB', 'KHET', 'DOCUMENTS'];
+    final titles = ['HISAB', 'KHET', 'DOCUMENTS', 'HISTORY'];
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -181,11 +190,7 @@ class _KhataHomeState extends State<KhataHome> {
             onPressed: _showBackupActions,
             icon: const Icon(Icons.backup_outlined),
           ),
-          IconButton(
-            tooltip: 'Settings',
-            onPressed: _showSettings,
-            icon: const Icon(Icons.settings_outlined),
-          ),
+
         ],
       ),
       body: IndexedStack(
@@ -194,6 +199,7 @@ class _KhataHomeState extends State<KhataHome> {
           HisabScreen(),
           KhetScreen(),
           DocumentsScreen(),
+          HistoryScreen(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
@@ -214,6 +220,11 @@ class _KhataHomeState extends State<KhataHome> {
             icon: Icon(Icons.folder_copy_outlined),
             selectedIcon: Icon(Icons.folder_copy),
             label: 'DOCUMENTS',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'HISTORY',
           ),
         ],
       ),
