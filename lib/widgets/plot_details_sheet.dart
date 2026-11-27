@@ -139,24 +139,28 @@ class KhetPlotDetailsSheet extends StatelessWidget {
                 ]),
               ),
               const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddPaniScreen(initialPlotId: plot['id'] as String))),
-                  icon: const Icon(Icons.water_drop_outlined), label: const Text('Add Pani'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'FASAL', initialPlotId: plot['id'] as String))),
-                  icon: const Icon(Icons.grass_outlined), label: const Text('Add Fasal'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'HARA_BEEJ', initialPlotId: plot['id'] as String))),
-                  icon: const Icon(Icons.pets_outlined), label: const Text('Add Hara Beej'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'DAWAI', initialPlotId: plot['id'] as String))),
-                  icon: const Icon(Icons.medication_outlined), label: const Text('Add Dawai'),
-                ),
-              ]),
+              if (plot['isMine'] == true)
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddPaniScreen(initialPlotId: plot['id'] as String))),
+                    icon: const Icon(Icons.water_drop_outlined), label: const Text('Add Pani'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'FASAL', initialPlotId: plot['id'] as String))),
+                    icon: const Icon(Icons.grass_outlined), label: const Text('Add Fasal'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'HARA_BEEJ', initialPlotId: plot['id'] as String))),
+                    icon: const Icon(Icons.pets_outlined), label: const Text('Add Hara Beej'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'DAWAI', initialPlotId: plot['id'] as String))),
+                    icon: const Icon(Icons.medication_outlined), label: const Text('Add Dawai'),
+                  ),
+                ])
+              else
+                const Text('Yeh side wala killa hai. Iske liye apni entry dropdown se nahi banegi.',
+                  style: TextStyle(color: Colors.black54, fontSize: 12)),
             ]),
           ),
         );
