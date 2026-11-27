@@ -609,8 +609,7 @@ class _KhetScreenState extends State<KhetScreen> {
                 icon: const Icon(Icons.share_outlined),
                 label: const Text('WhatsApp Bill'),
               ),
-              if (balance > 0)
-                FilledButton.tonalIcon(
+              FilledButton.tonalIcon(
                   onPressed: () => _recordTractorPayment(row),
                   icon: const Icon(Icons.payments_outlined),
                   label: const Text('Add Payment'),
