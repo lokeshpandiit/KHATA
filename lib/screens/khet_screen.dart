@@ -1335,12 +1335,31 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       _error(widget.type == 'FASAL' ? 'Fasal ka naam likhein' : widget.type == 'DAWAI' ? 'Dawai ka naam likhein' : 'Naam likhein');
       return;
     }
-    if (_needsFarmDetails && (_plotId == null || _plotId!.isEmpty)) {
-      _error('Apna killa select karein');
+    if (_needsFarmDetails && _selectedPlots.isEmpty) {
+      _error('Kam se kam ek killa select karein');
       return;
     }
-    if (widget.type == 'HARA_BEEJ' && _kyariNumber.text.trim().isEmpty) {
-      _error('Hara beej wali kyari ka number/name likhein');
+    var totalSelectedKyaris = 0;
+    if (_needsFarmDetails) {
+      for (final entry in _selectedPlots.entries) {
+        final matches = _storage.records('plots').where((plot) => plot['id'] == entry.key);
+        if (matches.isEmpty) {
+          _error('Selected killa nahi mila. Dobara select karein.');
+          return;
+        }
+        final total = (matches.first['totalKyaris'] as num?)?.toInt() ?? 0;
+        if (total <= 0 || entry.value <= 0 || entry.value > total) {
+          _error('Har selected kille ki total kyari Map Edit mein set karein aur valid kyari count chunein.');
+          return;
+        }
+        totalSelectedKyaris += entry.value;
+      }
+    }
+    if (widget.type == 'HARA_BEEJ' &&
+        _selectedPlots.values.any((count) => count < ((_storage.records('plots')
+          .firstWhere((plot) => _selectedPlots.keys.contains(plot['id']))['totalKyaris'] as num?)?.toInt() ?? count)) &&
+        _kyariNumber.text.trim().isEmpty) {
+      _error('Partial killa ke liye kyari number/name likhein');
       return;
     }
     if (widget.type == 'DAWAI' && _reminderEnabled && _reminderAt == null) {
@@ -1356,57 +1375,89 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     final now = DateTime.now();
     final activityDate = DateTime(
       _activityDate.year, _activityDate.month, _activityDate.day, now.hour, now.minute);
-    final recordId = now.microsecondsSinceEpoch.toString();
-    final reminderId = int.parse(recordId) % 2000000000;
-    final currentCrop = _currentCrop;
-    final record = <String, dynamic>{
-      'id': recordId,
-      'type': widget.type,
-      'plotId': _plotId,
-      'title': title,
-      'price': price,
-      'note': _note.text.trim(),
-      'itemPhoto': _itemPhotos.isEmpty ? null : _itemPhotos.first,
-      'itemPhotos': _itemPhotos,
-      'billPhoto': _billPhotos.isEmpty ? null : _billPhotos.first,
-      'billPhotos': _billPhotos,
-      'date': activityDate.toIso8601String(),
-    };
-
-    if (_needsFarmDetails) {
-      record['season'] = _season;
-      record['year'] = _year;
-      record['activityDate'] = activityDate.toIso8601String();
-    }
-    if (widget.type == 'FASAL') {
-      record['cropName'] = title;
-      record['sowingDate'] = activityDate.toIso8601String();
-    }
-    if (widget.type == 'HARA_BEEJ') {
-      record['seedName'] = title;
-      record['kyariNumber'] = _kyariNumber.text.trim();
-      record['sowingDate'] = activityDate.toIso8601String();
-    }
-    if (widget.type == 'DAWAI') {
-      record['purpose'] = _purpose;
-      record['cropAtUse'] = currentCrop == null
-          ? 'Fasal record nahi hai'
-          : (currentCrop['cropName'] ?? currentCrop['title'] ?? 'Fasal').toString();
-      record['applicationDate'] = activityDate.toIso8601String();
-      record['reminderDate'] = _reminderEnabled ? _reminderAt?.toIso8601String() : null;
-      record['reminderId'] = _reminderEnabled ? reminderId : null;
-    }
+    final batchId = now.microsecondsSinceEpoch.toString();
+    final reminderId = int.parse(batchId) % 2000000000;
+    final plotEntries = _needsFarmDetails ? _selectedPlots.entries.toList() : <MapEntry<String, int>>[];
+    final count = _needsFarmDetails ? plotEntries.length : 1;
+    var allocatedPrice = 0.0;
+    String? reminderError;
 
     try {
-      await _storage.addRecord('khet', record);
-      String? reminderError;
+      for (var index = 0; index < count; index++) {
+        final plotEntry = _needsFarmDetails ? plotEntries[index] : null;
+        final plotId = plotEntry?.key ?? _plotId;
+        final kyariCount = plotEntry?.value ?? 0;
+        final plotMatches = plotId == null
+            ? <Map<String, dynamic>>[]
+            : _storage.records('plots').where((plot) => plot['id'] == plotId).toList();
+        final totalKyaris = plotMatches.isEmpty
+            ? 0
+            : (plotMatches.first['totalKyaris'] as num?)?.toInt() ?? 0;
+        final currentCrop = widget.type == 'DAWAI' ? _currentCropFor(plotId) : null;
+        final plotPrice = _needsFarmDetails
+            ? (index == count - 1
+                ? price - allocatedPrice
+                : price * kyariCount / totalSelectedKyaris)
+            : price;
+        allocatedPrice += plotPrice;
+        final record = <String, dynamic>{
+          'id': (int.parse(batchId) + index).toString(),
+          'batchId': batchId,
+          'selectedPlotCount': _needsFarmDetails ? plotEntries.length : 0,
+          'type': widget.type,
+          'plotId': plotId,
+          'title': title,
+          'price': plotPrice,
+          'note': _note.text.trim(),
+          'itemPhoto': _itemPhotos.isEmpty ? null : _itemPhotos.first,
+          'itemPhotos': _itemPhotos,
+          'billPhoto': _billPhotos.isEmpty ? null : _billPhotos.first,
+          'billPhotos': _billPhotos,
+          'date': activityDate.toIso8601String(),
+        };
+
+        if (_needsFarmDetails) {
+          record.addAll({
+            'season': _season,
+            'year': _year,
+            'activityDate': activityDate.toIso8601String(),
+            'kyariCount': kyariCount,
+            'totalKyarisSnapshot': totalKyaris,
+            'fullKilla': kyariCount == totalKyaris,
+          });
+        }
+        if (widget.type == 'FASAL') {
+          record['cropName'] = title;
+          record['sowingDate'] = activityDate.toIso8601String();
+        }
+        if (widget.type == 'HARA_BEEJ') {
+          record['seedName'] = title;
+          record['kyariNumber'] = _kyariNumber.text.trim();
+          record['sowingDate'] = activityDate.toIso8601String();
+        }
+        if (widget.type == 'DAWAI') {
+          record['purpose'] = _purpose;
+          record['cropAtUse'] = currentCrop == null
+              ? 'Fasal record nahi hai'
+              : (currentCrop['cropName'] ?? currentCrop['title'] ?? 'Fasal').toString();
+          record['applicationDate'] = activityDate.toIso8601String();
+          record['reminderDate'] = _reminderEnabled ? _reminderAt?.toIso8601String() : null;
+          record['reminderId'] = _reminderEnabled ? reminderId : null;
+        }
+        await _storage.addRecord('khet', record);
+      }
+
       if (widget.type == 'DAWAI' && _reminderEnabled && _reminderAt != null) {
         try {
+          final killaNames = plotEntries.map((entry) {
+            final plot = _storage.records('plots').firstWhere((p) => p['id'] == entry.key);
+            return plotLabel(plot);
+          }).join(', ');
           await FarmReminderService.schedule(
             id: reminderId,
             scheduledAt: _reminderAt!,
-            title: 'KHATA: ' + title,
-            body: 'Dawai dalni hai · ' + _purpose + ' · Killa: ' + plotLabel(_storage.records('plots').firstWhere((p) => p['id'] == _plotId)),
+            title: 'KHATA: $title',
+            body: 'Dawai dalni hai · $_purpose · Kille: $killaNames',
           );
         } catch (error) {
           reminderError = error.toString();
@@ -1416,7 +1467,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
         final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
         if (reminderError != null) {
-          messenger.showSnackBar(SnackBar(content: Text('Entry save ho gayi, reminder nahi laga: ' + reminderError)));
+          messenger.showSnackBar(SnackBar(content: Text('Entry save ho gayi, reminder nahi laga: $reminderError')));
         }
       }
     } catch (error) {
