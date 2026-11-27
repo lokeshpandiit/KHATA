@@ -198,7 +198,13 @@ class StorageBackupService {
         return value.map(replace).toList();
       }
       if (value is Map<String, dynamic>) {
-        return value.map((key, nested) => MapEntry(key, replace(nested)));
+        return value.map((key, nested) {
+          final updatedKey = key == oldPath ||
+                  key.startsWith('$oldPath${p.separator}')
+              ? p.join(newPath, p.relative(key, from: oldPath))
+              : key;
+          return MapEntry(updatedKey, replace(nested));
+        });
       }
       return value;
     }
