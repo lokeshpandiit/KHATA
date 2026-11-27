@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:share_plus/share_plus.dart';
 import 'package:whatsapp_share_plus/whatsapp_share_plus.dart';
 
@@ -17,7 +19,7 @@ class KhataSharingService {
   }) async {
     final validFiles = files
         .where((path) => path.trim().isNotEmpty)
-        .where((path) => XFile(path).path.isNotEmpty)
+        .where((path) => File(path).existsSync())
         .toSet()
         .toList();
     final target = phone == null ? '' : normalizePhone(phone);
