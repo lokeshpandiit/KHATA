@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../screens/khet_screen.dart';
 import '../services/storage_backup_service.dart';
+import '../services/future_date_reminder_prompt.dart';
 import 'plot_selector.dart';
 import 'farm_fields.dart';
 
@@ -44,6 +45,12 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
       lastDate: DateTime(now.year + 8),
     );
     if (picked == null || !mounted) return;
+    await FutureDateReminderPrompt.check(
+      context,
+      date: picked,
+      taskTitle: 'Fasal katni - ${crop['title'] ?? 'Fasal'}',
+    );
+    if (!mounted) return;
     final updated = Map<String, dynamic>.from(crop)
       ..['harvested'] = true
       ..['harvestDate'] = DateTime(picked.year, picked.month, picked.day).toIso8601String()
