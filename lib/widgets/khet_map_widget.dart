@@ -121,7 +121,9 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final plots = _storage.records('plots');
+    final plots = _storage.records('plots').where((plot) =>
+        (plot['number'] as String? ?? '').trim().isNotEmpty ||
+        (plot['name'] as String? ?? '').trim().isNotEmpty).toList();
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -140,7 +142,7 @@ class _KhetMapWidgetState extends State<KhetMapWidget> {
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
           child: AspectRatio(
-            aspectRatio: 16 / 9,
+            aspectRatio: 4 / 3,
             child: LayoutBuilder(builder: (context, constraints) {
               final width = constraints.maxWidth;
               final height = constraints.maxHeight;
