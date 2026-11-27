@@ -1643,7 +1643,8 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
   String _person = '';
   final _manualPerson = TextEditingController();
   List<String> _savedPeople = [];
-  String _direction = 'Humne dusre ka kua chalaya';
+  // Kua Hisab records only the water we gave from our own well.
+  static const String _direction = 'Dusre ne hamara kua chalaya';
   String _well = 'Solar';
   bool _saving = false;
 
@@ -1756,14 +1757,14 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
       const SizedBox(height: 8),
       TextField(controller: _manualPerson, decoration: const InputDecoration(labelText: 'Ya naam manually likhein (optional)'), onChanged: (_) => setState(() => _person = '')),
       const SizedBox(height: 12),
-      DropdownButtonFormField<String>(
-        value: _direction,
-        decoration: const InputDecoration(labelText: 'Kis taraf ka kua chala?'),
-        items: const [
-          DropdownMenuItem(value: 'Humne dusre ka kua chalaya', child: Text('Humne dusre ka kua chalaya')),
-          DropdownMenuItem(value: 'Dusre ne hamara kua chalaya', child: Text('Dusre ne hamara kua chalaya')),
-        ],
-        onChanged: (v) => setState(() => _direction = v ?? _direction),
+      Card(
+        color: const Color(0xFFE8F5EF),
+        child: const ListTile(
+          dense: true,
+          leading: Icon(Icons.water_drop_outlined, color: Color(0xFF176B52)),
+          title: Text('Humne apne kuye se pani diya'),
+          subtitle: Text('Yeh entry sirf tab hogi jab doosre vyakti ne hamara kua chalaya ho.'),
+        ),
       ),
       const SizedBox(height: 12),
       DropdownButtonFormField<String>(
