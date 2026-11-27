@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../services/storage_backup_service.dart';
-import '../widgets/khet_map_widget.dart';\nimport '../widgets/plot_selector.dart';
+import '../widgets/khet_map_widget.dart';
+import '../widgets/plot_selector.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -189,7 +190,8 @@ class _Recent {
   final String type, title;
   final double amount;
   final DateTime? date;
-  final String? direction;\n  final String? details;
+  final String? direction;
+  final String? details;
 }
 
 class _MetricCard extends StatelessWidget {
