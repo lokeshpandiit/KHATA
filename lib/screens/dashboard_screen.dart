@@ -62,6 +62,12 @@ class DashboardScreen extends StatelessWidget {
     final monthKhetAmount = khet.where(thisMonth)
         .where((row) => row['type'] != 'PANI' && row['type'] != 'TRACTOR')
         .fold<double>(0, (sum, row) => sum + _amount(row['price']));
+    final monthPani = khet.where(thisMonth).where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON').fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
+    final monthTractorAmount = khet.where(thisMonth).where((row) => row['type'] == 'TRACTOR').fold<double>(0, (sum, row) => sum + _amount(row['price'] ?? row['totalAmount']));
+    final recent = <_RecentItem>[
+      ...hisabs.map((row) => _RecentItem(type: 'HISAB', title: (row['personName'] ?? row['category'] ?? 'Hisab').toString(), date: _date(row), amount: _amount(row['amount']), direction: (row['direction'] ?? '').toString(), details: (row['note'] ?? '').toString())),
+      ...khet.map((row) => _RecentItem(type: (row['type'] ?? 'KHET').toString(), title: (row['title'] ?? row['cropName'] ?? row['work'] ?? row['type'] ?? 'Khet entry').toString(), date: _date(row), amount: _amount(row['price'] ?? row['amount']), direction: (row['direction'] ?? '').toString(), details: (row['note'] ?? row['contact'] ?? '').toString())),
+    ]..sort((a, b) => (b.date ?? DateTime(0)).compareTo(a.date ?? DateTime(0)));
     final pending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0).toList()
       ..sort((a, b) => (DateTime.tryParse(a['dueDate'] as String? ?? '') ?? DateTime(9999))
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '') ?? DateTime(9999)));
@@ -162,6 +168,13 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+}
+
+class _RecentItem {
+  const _RecentItem({required this.type, required this.title, required this.date, required this.amount, required this.direction, required this.details});
+  final String type, title, direction, details;
+  final DateTime? date;
+  final double amount;
 }
 
 class _MetricCard extends StatelessWidget {
