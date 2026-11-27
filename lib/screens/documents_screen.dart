@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../services/storage_backup_service.dart';
+import '../services/khata_sharing_service.dart';
 import '../widgets/khata_widgets.dart';
 
 class DocumentsScreen extends StatefulWidget {
@@ -92,17 +93,18 @@ class _DocumentsScreenState extends State<DocumentsScreen>
   }
 
   Future<void> _shareProduct(Map<String, dynamic> product) async {
-    final paths = [
-      product['billPhoto'] as String?,
-      product['warrantyPhoto'] as String?,
-    ].whereType<String>().where((path) => File(path).existsSync()).toList();
-    await Share.shareXFiles(
-      paths.map(XFile.new).toList(),
+    final paths = <String>[
+      ...(product['billPhotos'] as List? ?? const []).whereType<String>(),
+      if (product['billPhoto'] is String) product['billPhoto'] as String,
+      ...(product['warrantyPhotos'] as List? ?? const []).whereType<String>(),
+      if (product['warrantyPhoto'] is String) product['warrantyPhoto'] as String,
+    ].toSet().where((path) => File(path).existsSync()).toList();
+    await KhataSharingService.share(
       text: [
         'Product - ${product['name']}',
-        if ((product['note'] as String? ?? '').isNotEmpty)
-          'Note: ${product['note']}',
+        if ((product['note'] as String? ?? '').isNotEmpty) 'Note: ${product['note']}',
       ].join('\n'),
+      files: paths,
     );
   }
 
@@ -271,11 +273,49 @@ class _MemberDocumentsScreenState extends State<MemberDocumentsScreen> {
   List<String> get _documents =>
       (widget.member['documents'] as List? ?? const []).cast<String>();
 
+  Future<String?> _askDocumentName() async {
+    final controller = TextEditingController(text: 'Aadhaar Card');
+    const names = ['Aadhaar Card', 'PAN Card', 'Voter ID', 'Driving Licence', 'Ration Card', 'Passport', 'Other'];
+    String selected = 'Aadhaar Card';
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Name this document'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            DropdownButtonFormField<String>(
+              initialValue: selected,
+              decoration: const InputDecoration(labelText: 'Document type'),
+              items: names.map((name) => DropdownMenuItem(value: name, child: Text(name))).toList(),
+              onChanged: (value) => setDialogState(() {
+                selected = value ?? selected;
+                if (selected != 'Other') controller.text = selected;
+                else controller.clear();
+              }),
+            ),
+            const SizedBox(height: 10),
+            TextField(controller: controller, decoration: const InputDecoration(labelText: 'Document name')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            FilledButton(onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            }, child: const Text('Continue')),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
   Future<void> _addFromCameraOrGallery(ImageSource source) async {
     try {
-      final image = await _picker.pickImage(source: source, imageQuality: 90);
-      if (image == null) return;
-      await _keepDocument(image.path);
+      final paths = source == ImageSource.gallery
+          ? (await _picker.pickMultiImage(imageQuality: 90)).map((image) => image.path).toList()
+          : [if (await _picker.pickImage(source: source, imageQuality: 90) case final image?) image.path];
+      if (paths.isNotEmpty) await _keepDocuments(paths);
     } catch (error) {
       _error('Could not add document: $error');
     }
@@ -283,23 +323,33 @@ class _MemberDocumentsScreenState extends State<MemberDocumentsScreen> {
 
   Future<void> _addFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(allowMultiple: false);
-      final path = result?.files.single.path;
-      if (path != null) await _keepDocument(path);
+      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+      final paths = (result?.files ?? const []).map((file) => file.path).whereType<String>().toList();
+      if (paths.isNotEmpty) await _keepDocuments(paths);
     } catch (error) {
       _error('Could not add document: $error');
     }
   }
 
-  Future<void> _keepDocument(String path) async {
+  Future<void> _keepDocuments(List<String> paths) async {
+    final label = await _askDocumentName();
+    if (label == null || label.isEmpty) return;
     setState(() => _busy = true);
     try {
-      final permanent = await _storage.keepFile(path, folder: 'Documents');
-      final documents = [..._documents, permanent];
-      final updated = {...widget.member, 'documents': documents};
+      final documents = [..._documents];
+      final labels = Map<String, dynamic>.from(widget.member['documentNames'] as Map? ?? const {});
+      for (var i = 0; i < paths.length; i++) {
+        final permanent = await _storage.keepFile(paths[i], folder: 'Documents');
+        documents.add(permanent);
+        labels[permanent] = paths.length == 1 ? label : '$label ${i + 1}';
+      }
+      final updated = {...widget.member, 'documents': documents, 'documentNames': labels};
       await _storage.updateRecord('members', widget.member['id'] as String, updated);
       if (!mounted) return;
-      setState(() => widget.member['documents'] = documents);
+      setState(() {
+        widget.member['documents'] = documents;
+        widget.member['documentNames'] = labels;
+      });
     } catch (error) {
       _error('Could not save document: $error');
     } finally {
@@ -307,8 +357,8 @@ class _MemberDocumentsScreenState extends State<MemberDocumentsScreen> {
     }
   }
 
-  Future<void> _shareDocument(String path) async {
-    await Share.shareXFiles([XFile(path)], text: 'Personal document');
+  Future<void> _shareDocument(String path, String label) async {
+    await KhataSharingService.share(text: '$label - Personal document', files: [path]);
   }
 
   void _error(String message) {
@@ -362,12 +412,12 @@ class _MemberDocumentsScreenState extends State<MemberDocumentsScreen> {
                             leading: isImage
                                 ? mediaThumbnail(path, size: 48)
                                 : const CircleAvatar(child: Icon(Icons.description_outlined)),
-                            title: Text(path.split(Platform.pathSeparator).last),
-                            onTap: isImage ? () => _preview(path) : () => _shareDocument(path),
+                            title: Text(((widget.member['documentNames'] as Map?)?[path] ?? path.split(Platform.pathSeparator).last).toString()),
+                            onTap: isImage ? () => _preview(path) : () => _shareDocument(path, ((widget.member['documentNames'] as Map?)?[path] ?? 'Personal document').toString()),
                             trailing: IconButton(
                               tooltip: 'Share document',
                               icon: const Icon(Icons.share_outlined),
-                              onPressed: () => _shareDocument(path),
+                              onPressed: () => _shareDocument(path, ((widget.member['documentNames'] as Map?)?[path] ?? 'Personal document').toString()),
                             ),
                           ),
                         );
@@ -402,8 +452,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _picker = ImagePicker();
   final _name = TextEditingController();
   final _note = TextEditingController();
-  String? _bill;
-  String? _warranty;
+  final List<String> _billPhotos = [];
+  final List<String> _warrantyPhotos = [];
   bool _saving = false;
 
   @override
@@ -415,33 +465,28 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _pick(bool warranty, ImageSource source) async {
     try {
-      final image = await _picker.pickImage(source: source, imageQuality: 90);
-      if (image == null) return;
-      final saved = await _storage.keepFile(image.path, folder: 'Documents');
-      setState(() {
-        if (warranty) {
-          _warranty = saved;
-        } else {
-          _bill = saved;
-        }
-      });
+      final images = source == ImageSource.gallery
+          ? await _picker.pickMultiImage(imageQuality: 90)
+          : [if (await _picker.pickImage(source: source, imageQuality: 90) case final image?) image];
+      final target = warranty ? _warrantyPhotos : _billPhotos;
+      for (final image in images) {
+        target.add(await _storage.keepFile(image.path, folder: 'Documents'));
+      }
+      if (mounted) setState(() {});
     } catch (error) {
-      _error('Could not save product photo: $error');
+      _error('Could not save product photos: $error');
     }
   }
 
   Future<void> _pickBillFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
-      );
-      final path = result?.files.single.path;
-      if (path == null) return;
-      final saved = await _storage.keepFile(path, folder: 'Documents');
-      setState(() => _bill = saved);
+      final result = await FilePicker.platform.pickFiles(type: FileType.image, allowMultiple: true);
+      for (final file in result?.files ?? const []) {
+        if (file.path != null) _billPhotos.add(await _storage.keepFile(file.path!, folder: 'Documents'));
+      }
+      if (mounted) setState(() {});
     } catch (error) {
-      _error('Could not save bill image: $error');
+      _error('Could not save bill images: $error');
     }
   }
 
@@ -463,8 +508,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
         'id': now.microsecondsSinceEpoch.toString(),
         'name': _name.text.trim(),
         'note': _note.text.trim(),
-        'billPhoto': _bill,
-        'warrantyPhoto': _warranty,
+        'billPhoto': _billPhotos.isEmpty ? null : _billPhotos.first,
+        'billPhotos': _billPhotos,
+        'warrantyPhoto': _warrantyPhotos.isEmpty ? null : _warrantyPhotos.first,
+        'warrantyPhotos': _warrantyPhotos,
         'date': now.toIso8601String(),
       });
       if (mounted) Navigator.pop(context, true);
@@ -476,40 +523,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 
   Widget _photoPicker(String title, bool warranty) {
-    final path = warranty ? _warranty : _bill;
+    final paths = warranty ? _warrantyPhotos : _billPhotos;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-        Wrap(
-          spacing: 8,
-          children: [
-            TextButton.icon(
-              onPressed: () => _pick(warranty, ImageSource.camera),
-              icon: const Icon(Icons.camera_alt_outlined),
-              label: const Text('Camera'),
-            ),
-            TextButton.icon(
-              onPressed: warranty
-                  ? () => _pick(warranty, ImageSource.gallery)
-                  : _pickBillFile,
-              icon: Icon(warranty ? Icons.photo_library_outlined : Icons.attach_file),
-              label: Text(warranty ? 'Gallery' : 'File/Gallery'),
-            ),
-          ],
-        ),
-        if (path != null)
-          InkWell(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => Scaffold(
-                  appBar: AppBar(title: Text(title)),
-                  body: Center(child: InteractiveViewer(child: Image.file(File(path)))),
-                ),
-              ),
-            ),
-            child: mediaThumbnail(path, size: 92),
-          ),
+        Wrap(spacing: 8, children: [
+          TextButton.icon(onPressed: () => _pick(warranty, ImageSource.camera),
+            icon: const Icon(Icons.camera_alt_outlined), label: const Text('Camera')),
+          TextButton.icon(onPressed: warranty ? () => _pick(warranty, ImageSource.gallery) : _pickBillFile,
+            icon: const Icon(Icons.photo_library_outlined), label: const Text('Add multiple')),
+        ]),
+        if (paths.isNotEmpty)
+          Wrap(spacing: 6, children: paths.map((path) => mediaThumbnail(path, size: 76)).toList()),
       ],
     );
   }
