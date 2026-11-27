@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../services/storage_backup_service.dart';
+import '../services/farm_reminder_service.dart';
 import '../widgets/khet_map_widget.dart';
 import '../widgets/plot_selector.dart';
 
@@ -77,7 +78,7 @@ class DashboardScreen extends StatelessWidget {
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _PendingPaymentsScreen(rows: pending, money: money),
+              builder: (_) => _PendingPaymentsScreen(rows: pending, money: money, storage: storage),
             )),
             child: _MetricCard(title: 'Pending payments', value: money.format(pendingTotal), icon: Icons.pending_actions, tint: const Color(0xFFE5F2EC)),
           )),
@@ -92,7 +93,7 @@ class DashboardScreen extends StatelessWidget {
         ]),
         const SizedBox(height: 10),
         Row(children: [
-          Expanded(child: _MetricCard(title: 'Khet expenses', value: money.format(monthKhetAmount), icon: Icons.agriculture, tint: const Color(0xFFF8EEDC))),
+          Expanded(child: InkWell(onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => _KhetExpensesScreen(rows: khet, money: money))), child: _MetricCard(title: 'Khet expenses', value: money.format(monthKhetAmount), icon: Icons.agriculture, tint: const Color(0xFFF8EEDC)))),
           const SizedBox(width: 10),
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
@@ -401,62 +402,36 @@ class _PersonMonthDetailScreen extends StatelessWidget {
   }
 }
 
-class _PendingPaymentsScreen extends StatelessWidget {
-  const _PendingPaymentsScreen({required this.rows, required this.money});
-  final List<Map<String, dynamic>> rows;
-  final NumberFormat money;
-
-  double _amount(dynamic value) {
-    if (value is num) return value.toDouble();
-    return double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
-  }
-
-  double _balance(Map<String, dynamic> row) {
-    final explicit = row['balance'];
-    if (explicit is num) return explicit.toDouble();
-    return (_amount(row['totalAmount'] ?? row['price']) - _amount(row['paidAmount'])).clamp(0, double.infinity).toDouble();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final total = rows.fold<double>(0, (sum, row) => sum + _balance(row));
-    return Scaffold(
-      appBar: AppBar(title: const Text('All pending tractor payments')),
-      body: rows.isEmpty
-          ? const Center(child: Text('Koi pending payment nahi hai.'))
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Card(child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('Total pending amount', style: TextStyle(color: Colors.black54)),
-                    const SizedBox(height: 5),
-                    Text(money.format(total), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.red)),
-                    Text('${rows.length} pending records'),
-                  ]),
-                )),
-                const SizedBox(height: 8),
-                ...rows.map((row) {
-                  final due = DateTime.tryParse(row['dueDate'] as String? ?? '');
-                  final customer = (row['customerName'] ?? row['contact'] ?? 'Customer').toString();
-                  final work = (row['work'] ?? row['title'] ?? 'Tractor work').toString();
-                  final amount = _amount(row['totalAmount'] ?? row['price']);
-                  final paid = _amount(row['paidAmount']);
-                  final isOverdue = due != null && due.isBefore(DateTime.now());
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 9),
-                    child: ListTile(
-                      isThreeLine: true,
-                      leading: Icon(Icons.pending_actions, color: isOverdue ? Colors.red : Colors.orange),
-                      title: Text(customer),
-                      subtitle: Text('${work}\nTotal: ${money.format(amount)} · Paid: ${money.format(paid)}${due == null ? '' : ' · Due: ${DateFormat('dd MMM yyyy').format(due)}'}'),
-                      trailing: Text(money.format(_balance(row)), style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
-                    ),
-                  );
-                }),
-              ],
-            ),
-    );
-  }
+class _KhetExpensesScreen extends StatelessWidget {
+ const _KhetExpensesScreen({required this.rows,required this.money});
+ final List<Map<String,dynamic>> rows; final NumberFormat money;
+ @override Widget build(BuildContext context){
+  final expenses=rows.where((r)=>r['type']!='PANI'&&r['type']!='TRACTOR').toList();
+  double amount(dynamic v)=>v is num?v.toDouble():double.tryParse(v?.toString()??'')??0;
+  final total=expenses.fold<double>(0,(s,r)=>s+amount(r['price']));
+  return Scaffold(appBar:AppBar(title:const Text('All Khet Expenses')),body:ListView(padding:const EdgeInsets.all(16),children:[
+   Card(child:ListTile(title:Text('${expenses.length} expense records'),trailing:Text(money.format(total),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18)))),
+   if(expenses.isEmpty)const Center(child:Padding(padding:EdgeInsets.all(30),child:Text('Koi expense record nahi hai.'))),
+   ...expenses.map((r){final d=DateTime.tryParse(r['date']?.toString()??'');return Card(child:ListTile(title:Text(r['type']?.toString()??'Expense'),subtitle:Text('${r['description']??r['name']??''}${d==null?'':'\\n'+DateFormat('dd MMM yyyy').format(d)}'),trailing:Text(money.format(amount(r['price'])))));})
+  ]));
+ }
+}
+class _PendingPaymentsScreen extends StatefulWidget {
+ const _PendingPaymentsScreen({required this.rows,required this.money,required this.storage});
+ final List<Map<String,dynamic>> rows; final NumberFormat money; final StorageBackupService storage;
+ @override State<_PendingPaymentsScreen> createState()=>_PendingPaymentsScreenState();
+}
+class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen>{
+ double amount(dynamic v)=>v is num?v.toDouble():double.tryParse((v??'').toString().replaceAll(',','').replaceAll('₹',''))??0;
+ double balance(Map<String,dynamic> r){final b=r['balance'];if(b is num)return b.toDouble();return (amount(r['totalAmount']??r['price'])-amount(r['paidAmount'])).clamp(0,double.infinity).toDouble();}
+ Future<void> addPlan() async{
+  final title=TextEditingController(),note=TextEditingController();DateTime? when;
+  final ok=await showDialog<bool>(context:context,builder:(ctx)=>StatefulBuilder(builder:(ctx,setD)=>AlertDialog(title:const Text('Future Plan / Reminder'),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:title,decoration:const InputDecoration(labelText:'Kya karna hai?')),TextField(controller:note,decoration:const InputDecoration(labelText:'Details (optional)')),OutlinedButton.icon(onPressed:()async{final d=await showDatePicker(context:ctx,initialDate:DateTime.now().add(const Duration(days:1)),firstDate:DateTime.now(),lastDate:DateTime.now().add(const Duration(days:3650)));if(d==null)return;final t=await showTimePicker(context:ctx,initialTime:const TimeOfDay(hour:9,minute:0));if(t!=null)setD(()=>when=DateTime(d.year,d.month,d.day,t.hour,t.minute));},icon:const Icon(Icons.alarm),label:Text(when==null?'Date/time choose karein':DateFormat('dd MMM yyyy, hh:mm a').format(when!)))]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx,false),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(ctx,true),child:const Text('Save'))]));
+  if(ok!=true||title.text.trim().isEmpty||when==null||!when!.isAfter(DateTime.now()))return;
+  final id=DateTime.now().millisecondsSinceEpoch;final rec={'id':'plan-$id','notificationId':id%2147483647,'title':title.text.trim(),'note':note.text.trim(),'date':when!.toIso8601String(),'done':false,'createdAt':DateTime.now().toIso8601String()};
+  await widget.storage.addRecord('plans',rec);try{await FarmReminderService.schedule(id:rec['notificationId'] as int,scheduledAt:when!,title:'KHATA Reminder: ${rec['title']}',body:rec['note'] as String);}catch(e){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Plan save hua, notification permission/check karein: $e')));}if(mounted)setState((){});
+ }
+ Future<void> deletePlan(Map<String,dynamic> p)async{await FarmReminderService.cancel(p['notificationId'] as int???0);await widget.storage.deleteRecord('plans',p['id'].toString());setState((){});}
+ @override Widget build(BuildContext context){final plans=widget.storage.records('plans').where((p)=>p['done']!=true).toList()..sort((a,b)=>(DateTime.tryParse(a['date']?.toString()??'')??DateTime(9999)).compareTo(DateTime.tryParse(b['date']?.toString()??'')??DateTime(9999)));final total=widget.rows.fold<double>(0,(s,r)=>s+balance(r));
+ return Scaffold(appBar:AppBar(title:const Text('Pending / Future Plans')),floatingActionButton:FloatingActionButton.extended(onPressed:addPlan,icon:const Icon(Icons.add_alarm),label:const Text('Add Future Plan')),body:ListView(padding:const EdgeInsets.all(16),children:[Card(child:ListTile(title:const Text('Pending Tractor Payments'),subtitle:Text('${widget.rows.length} records'),trailing:Text(widget.money.format(total),style:const TextStyle(color:Colors.red,fontWeight:FontWeight.bold,fontSize:18)))),...widget.rows.map((r){final due=DateTime.tryParse(r['dueDate']?.toString()??'');return Card(child:ListTile(title:Text((r['customerName']??r['contact']??'Customer').toString()),subtitle:Text('${r['work']??r['title']??'Tractor work'}${due==null?'':'\\nDue: '+DateFormat('dd MMM yyyy').format(due)}'),trailing:Text(widget.money.format(balance(r)),style:const TextStyle(color:Colors.red,fontWeight:FontWeight.bold))));}),const SizedBox(height:16),const Text('Future Plans & Reminders',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),if(plans.isEmpty)const Padding(padding:EdgeInsets.all(12),child:Text('Koi plan nahi. Add Future Plan se banayein.')),...plans.map((p){final d=DateTime.tryParse(p['date']?.toString()??'');return Card(child:ListTile(leading:const Icon(Icons.notifications_active,color:Colors.orange),title:Text(p['title']?.toString()??''),subtitle:Text('${p['note']??''}${d==null?'':'\\n'+DateFormat('dd MMM yyyy, hh:mm a').format(d)}'),trailing:IconButton(icon:const Icon(Icons.delete_outline),onPressed:()=>deletePlan(p))));})]));}
 }
