@@ -179,8 +179,8 @@ class _KhetScreenState extends State<KhetScreen> {
 
   Future<void> _shareTractor(Map<String, dynamic> row) async {
     final due = DateTime.tryParse(row['dueDate'] as String? ?? '');
-    final files = _paths(row, 'billPhotos', 'billPhoto') +
-        _paths(row, 'itemPhotos', 'itemPhoto');
+    final files = (_paths(row, 'billPhotos', 'billPhoto') +
+        _paths(row, 'itemPhotos', 'itemPhoto')).toSet().toList();
     await KhataSharingService.share(
       phone: row['customerPhone'] as String?,
       text: [
