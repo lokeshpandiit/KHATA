@@ -64,7 +64,8 @@ class DashboardScreen extends StatelessWidget {
         .fold<double>(0, (sum, row) => sum + _amount(row['price']));
     final monthTractorAmount = khet.where((row) => thisMonth(row) && row['type'] == 'TRACTOR')
         .fold<double>(0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['price']));
-    final monthPani = khet.where(thisMonth).where((row) => row['type'] == 'PANI')
+    final monthPani = khet.where(thisMonth)
+        .where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON')
         .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? int.tryParse('${row['minutes']}') ?? 0));
     final todayCount = hisabs.where(today).length + khet.where(today).length;
     final pending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0).toList()
@@ -89,6 +90,7 @@ class DashboardScreen extends StatelessWidget {
         row['type'] == 'PANI'
             ? [
                 if ((row['direction'] ?? '').toString().isNotEmpty) 'Len-den: ${row['direction']}',
+                if ((row['wellType'] ?? '').toString().isNotEmpty) 'Kua: ${row['wellType']}',
                 if ((row['source'] ?? '').toString().isNotEmpty) 'Source: ${row['source']}',
                 if (row['contact'] != null) 'Contact: ${row['contact']}',
                 if ((row['minutes'] as num?)?.toInt() != null) 'Time: ${row['minutes']} min',
@@ -132,7 +134,7 @@ class DashboardScreen extends StatelessWidget {
           const Divider(height: 18),
           _SummaryLine(label: 'Khet records', value: khet.where(thisMonth).where((r) => r['type'] != 'PANI').length.toString()),
           const Divider(height: 18),
-          _SummaryLine(label: 'Pani entries', value: khet.where(thisMonth).where((r) => r['type'] == 'PANI').length.toString()),
+          _SummaryLine(label: 'Pani entries', value: khet.where(thisMonth).where((r) => r['type'] == 'PANI' && r['ledgerMode'] != 'PERSON').length.toString()),
           const Divider(height: 18),
           _SummaryLine(label: 'Tractor work amount', value: money.format(monthTractorAmount)),
           const Divider(height: 18),
