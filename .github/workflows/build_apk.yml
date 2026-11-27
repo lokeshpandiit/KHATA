@@ -34,7 +34,11 @@ jobs:
       - run: flutter analyze --no-fatal-infos
       - run: flutter test
       - run: flutter build apk --release
+      - name: Rename APK with version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | cut -d+ -f1)
+          cp build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/KHATA_v${VERSION}.apk"
       - uses: actions/upload-artifact@v4
         with:
-          name: khata-release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: KHATA-v${{ github.run_number }}-APK
+          path: build/app/outputs/flutter-apk/KHATA_v*.apk
