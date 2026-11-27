@@ -835,6 +835,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   String _season = 'Rabi';
   int _year = DateTime.now().year;
   DateTime _activityDate = DateTime.now();
+  DateTime? _harvestDate;
+  bool _harvested = false;
   bool _saving = false;
 
   List<Map<String, dynamic>> get _contacts => _storage.records('contacts');
@@ -1299,6 +1301,23 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     super.dispose();
   }
 
+  Future<void> _pickHarvestDate() async {
+    final now = DateTime.now();
+    final initial = _harvestDate ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(now.year - 8),
+      lastDate: DateTime(now.year + 8),
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _harvestDate = picked;
+        _harvested = true;
+      });
+    }
+  }
+
   Future<void> _pickActivityDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -1472,6 +1491,8 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
         if (widget.type == 'FASAL') {
           record['cropName'] = title;
           record['sowingDate'] = activityDate.toIso8601String();
+          record['harvested'] = _harvested;
+          record['harvestDate'] = _harvested ? (_harvestDate ?? DateTime.now()).toIso8601String() : null;
         }
         if (widget.type == 'HARA_BEEJ') {
           record['seedName'] = title;
@@ -1661,6 +1682,26 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
               icon: const Icon(Icons.calendar_month_outlined),
               label: Text(_dateLabel + ': ' + DateFormat('dd MMM yyyy').format(_activityDate)),
             ),
+            if (widget.type == 'FASAL') ...[
+              const SizedBox(height: 10),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Fasal kat gayi hai'),
+                subtitle: const Text('Katayi ke baad record history mein rahega, agali fasal add kar sakenge'),
+                value: _harvested,
+                onChanged: (value) => setState(() {
+                  _harvested = value;
+                  if (!value) _harvestDate = null;
+                  else _harvestDate ??= DateTime.now();
+                }),
+              ),
+              if (_harvested)
+                OutlinedButton.icon(
+                  onPressed: _pickHarvestDate,
+                  icon: const Icon(Icons.event_available_outlined),
+                  label: Text('Fasal katne ki date: ' + DateFormat('dd MMM yyyy').format(_harvestDate ?? DateTime.now())),
+                ),
+            ],
           ],
           const SizedBox(height: 12),
           TextField(
