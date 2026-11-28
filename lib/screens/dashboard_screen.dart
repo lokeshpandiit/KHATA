@@ -535,6 +535,10 @@ class _PersonMonthDetailScreen extends StatelessWidget {
         ...sorted.reversed.map((row) {
           final delta = _delta(row);
           final isCost = row['entryType'] == 'EXPENSE' || row['type'] == 'KHET_PURCHASE' || row['type'] == 'TRACTOR';
+          final balanceAfter = runningBalances[row['id']?.toString() ?? ''] ?? 0;
+          final balanceLabel = balanceAfter >= 0
+              ? '${money.format(balanceAfter.abs())} lena baki'
+              : '${money.format(balanceAfter.abs())} dena baki';
           return Card(child: ListTile(
             leading: Icon(
               isCost ? Icons.shopping_bag_outlined
@@ -543,10 +547,6 @@ class _PersonMonthDetailScreen extends StatelessWidget {
                       : Icons.call_received,
             ),
             title: Text(_title(row)),
-            final balanceAfter = runningBalances[row['id']?.toString() ?? ''] ?? 0;
-            final balanceLabel = balanceAfter >= 0
-                ? '${money.format(balanceAfter.abs())} lena baki'
-                : '${money.format(balanceAfter.abs())} dena baki';
             subtitle: Text('${_subtitle(row, money)}\\nBalance after: $balanceLabel'),
             trailing: Text(
               delta.abs() < 0.009 ? '₹0' : '${delta > 0 ? '+' : '−'}${money.format(delta.abs())}',
