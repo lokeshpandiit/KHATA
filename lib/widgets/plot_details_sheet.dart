@@ -225,6 +225,13 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
       valueListenable: storage.revision,
       builder: (context, _, __) {
         final plotRecords = storage.records('khet').where((row) => row['plotId'] == widget.plot['id']).toList();
+        final linkedHisabExpenses = storage.records('hisabs').where((row) {
+          if (row['category'] != 'Khet' || row['entryType'] != 'EXPENSE') return false;
+          if (row['plotId'] == widget.plot['id']) return true;
+          return (row['plotIds'] as List? ?? const [])
+              .any((id) => id.toString() == widget.plot['id'].toString());
+        }).toList()
+          ..sort((a, b) => (_date(b) ?? DateTime(0)).compareTo(_date(a) ?? DateTime(0)));
         final cropCycles = _latest(plotRecords.where((row) => row['type'] == 'FASAL').toList());
         final selectedMatches = cropCycles.where((row) => _cycleKey(row) == _selectedCropCycleId).toList();
         final activeMatches = cropCycles.where((row) => !_isCompleted(row)).toList();
@@ -364,6 +371,33 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                       _line('Abhi baaki kyari', remainingKyaris.toString()),
                     ],
                   ]),
+                  _section('Linked Khet expenses', linkedHisabExpenses.isEmpty
+                    ? [const Text('Is kille se juda koi alag ya samuhik Khet kharcha nahi hai.')]
+                    : linkedHisabExpenses.map((row) {
+                        final total = _amount(row['totalAmount'] ?? row['amount']);
+                        final ids = (row['plotIds'] as List? ?? const [])
+                            .map((id) => id.toString()).toList();
+                        final labels = (row['plotLabelsSnapshot'] as List? ?? const [])
+                            .map((label) => label.toString()).where((label) => label.isNotEmpty).toList();
+                        final scope = ids.length > 1
+                            ? 'सामूहिक खरीद · ${ids.length} किले${labels.isEmpty ? '' : ': ${labels.join(', ')}'}'
+                            : 'एक किले का खर्च';
+                        final date = _date(row);
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: const Icon(Icons.receipt_long_outlined),
+                          title: Text('${row['expenseCategory'] ?? 'खर्च'} · ${row['title'] ?? 'Khet expense'}',
+                              style: const TextStyle(fontWeight: FontWeight.w700)),
+                          subtitle: Text([
+                            scope,
+                            'पूरा बिल ₹${total.toStringAsFixed(0)} (हर किले में पूरा बिल दोबारा नहीं जोड़ा गया है)',
+                            if (date != null) DateFormat('dd MMM yyyy').format(date),
+                          ].join(' · ')),
+                          trailing: Text('₹${total.toStringAsFixed(0)}',
+                              style: const TextStyle(fontWeight: FontWeight.w800)),
+                        );
+                      }).toList()),
                   _section('Crop-wise expenses', expenseRows.isEmpty
                     ? [const Text('Is crop cycle ka koi kharcha record nahi hai.')]
                     : [
