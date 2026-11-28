@@ -1260,6 +1260,8 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
   Future<void> _updateWaterStatus(Map<String, dynamic> row) async {
     final noteController = TextEditingController(text: (row['waterPaymentNote'] ?? '').toString());
     final minutesController = TextEditingController();
+    final cashAmountController = TextEditingController();
+    String cashDirection = 'Diya';
     String status = (row['waterPaymentStatus'] ?? 'PENDING').toString();
     DateTime exchangeDate = DateTime.now();
     final owed = _waterOwedMinutes(row);
@@ -1271,9 +1273,36 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
         Text('${row['type'] == 'KUA' ? 'Humein is vyakti se pani lena hai' : 'Total udhaar'}: $owed min\nBadle mein mila: $exchanged min\nBaki: $remaining min\n${row['type'] == 'KUA' ? 'Kua: ${row['wellSelection'] ?? 'Solar'}' : ''}', style: const TextStyle(fontWeight: FontWeight.w600)),
         DropdownButtonFormField<String>(value: status, items: [
           DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
-          if (row['type'] != 'KUA') DropdownMenuItem(value: 'PAID', child: Text('Payment mil gaya')),
+          if (row['type'] != 'KUA') DropdownMenuItem(value: 'PAID', child: Text('Cash se full settlement')),
           DropdownMenuItem(value: 'WATER_EXCHANGE', child: Text('Badle mein pani liya')),
         ], onChanged: (v) => setDialog(() { status = v ?? 'PENDING'; })),
+        if (status == 'PAID' && row['type'] != 'KUA') ...[
+          DropdownButtonFormField<String>(
+            value: cashDirection,
+            decoration: const InputDecoration(labelText: 'Cash kis taraf se?'),
+            items: const [
+              DropdownMenuItem(value: 'Diya', child: Text('Humne paise diye')),
+              DropdownMenuItem(value: 'Liya', child: Text('Humne paise liye')),
+            ],
+            onChanged: (v) => setDialog(() { cashDirection = v ?? cashDirection; }),
+          ),
+          TextField(
+            controller: cashAmountController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Full settlement ke kitne rupaye?'),
+          ),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.calendar_today),
+            label: Text('Payment date: ${DateFormat('dd MMM yyyy').format(exchangeDate)}'),
+            onPressed: () async {
+              final picked = await showDatePicker(
+                context: ctx, initialDate: exchangeDate, firstDate: DateTime(2000),
+                lastDate: DateTime.now().add(const Duration(days: 3650)),
+              );
+              if (picked != null) setDialog(() => exchangeDate = picked);
+            },
+          ),
+        ],
         if (status == 'WATER_EXCHANGE') ...[
           TextField(controller: minutesController, keyboardType: const TextInputType.numberWithOptions(decimal: false), decoration: const InputDecoration(labelText: 'Badle mein kitne minute pani mila?'), onChanged: (_) => setDialog(() {})),
           OutlinedButton.icon(icon: const Icon(Icons.calendar_today), label: Text('Pani liya: ${DateFormat('dd MMM yyyy').format(exchangeDate)}'), onPressed: () async {
@@ -1286,25 +1315,32 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
       ])),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () {
         if (status == 'WATER_EXCHANGE') { final m = int.tryParse(minutesController.text.trim()) ?? 0; if (m <= 0 || m > remaining) { ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('1 se $remaining minute enter karein'))); return; } }
+        if (status == 'PAID' && row['type'] != 'KUA' && _amount(cashAmountController.text) <= 0) { ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Cash settlement ki rakam bharein'))); return; }
         Navigator.pop(ctx, true);
       }, child: const Text('Save'))],
     )));
-    if (saved != true) { noteController.dispose(); minutesController.dispose(); return; }
+    if (saved != true) { noteController.dispose(); minutesController.dispose(); cashAmountController.dispose(); return; }
     final updated = Map<String, dynamic>.from(row);
     final history = row['waterExchangeHistory'] is List ? List<Map<String, dynamic>>.from((row['waterExchangeHistory'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e))) : <Map<String, dynamic>>[];
+    final cashHistory = (row['waterCashPaymentHistory'] as List? ?? const []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    if (status == 'PAID' && row['type'] != 'KUA') {
+      cashHistory.add({'amount': _amount(cashAmountController.text), 'direction': cashDirection, 'date': exchangeDate.toIso8601String(), 'note': noteController.text.trim(), 'waterMinutesSettled': remaining});
+    }
     final totalExchangedBefore = history.fold<int>(0, (sum, e) => sum + _amount(e['minutes']).toInt());
     if (status == 'WATER_EXCHANGE') { final minutes = int.parse(minutesController.text.trim()); final before = (owed - totalExchangedBefore).clamp(0, 999999); history.add({'minutes': minutes, 'date': exchangeDate.toIso8601String(), 'note': noteController.text.trim(), 'balanceBefore': before, 'balanceAfter': (before - minutes).clamp(0, 999999)}); }
     final totalExchanged = history.fold<int>(0, (sum, e) => sum + _amount(e['minutes']).toInt());
     final left = (owed - totalExchanged).clamp(0, 999999);
     updated
       ..['waterExchangeHistory'] = history
+      ..['waterCashPaymentHistory'] = cashHistory
+      ..['waterCashPaidAmount'] = cashHistory.fold<double>(0, (sum, item) => sum + _amount(item['amount']))
       ..['waterExchangedMinutes'] = totalExchanged
       ..['waterRemainingMinutes'] = left
       ..['waterPaymentStatus'] = (status == 'WATER_EXCHANGE' && left > 0) ? 'PENDING' : status
-      ..['waterPaymentPending'] = (status == 'PAID') ? false : left > 0
+      ..['waterPaymentPending'] = status == 'PAID' ? false : left > 0
       ..['waterPaymentNote'] = noteController.text.trim();
     await widget.storage.updateRecord('khet', row['id'].toString(), updated);
-    noteController.dispose(); minutesController.dispose(); if (mounted) setState(() {});
+    noteController.dispose(); minutesController.dispose(); cashAmountController.dispose(); if (mounted) setState(() {});
   }
 
   Future<void> _recordExpensePayment(Map<String, dynamic> pendingRow) async {
