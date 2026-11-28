@@ -993,6 +993,37 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _completePlan(Map<String, dynamic> plan) async {
+    final notificationId = plan['notificationId'];
+    if (notificationId is num) {
+      await FarmReminderService.cancel(notificationId.toInt());
+    }
+    if (plan['_source'] == 'khet-reminder') {
+      final sourceId = plan['sourceRecordId']?.toString();
+      final matches = widget.storage
+          .records('khet')
+          .where((row) => row['id']?.toString() == sourceId);
+      if (matches.isNotEmpty) {
+        final updated = Map<String, dynamic>.from(matches.first)
+          ..['reminderDate'] = null
+          ..['reminderId'] = null
+          ..['reminderDone'] = true
+          ..['reminderDoneAt'] = DateTime.now().toIso8601String();
+        await widget.storage.updateRecord('khet', sourceId!, updated);
+      }
+    } else {
+      final id = plan['id'].toString();
+      final matches = widget.storage.records('plans').where((row) => row['id'].toString() == id);
+      if (matches.isNotEmpty) {
+        final updated = Map<String, dynamic>.from(matches.first)
+          ..['done'] = true
+          ..['completedAt'] = DateTime.now().toIso8601String();
+        await widget.storage.updateRecord('plans', id, updated);
+      }
+    }
+    if (mounted) setState(() {});
+  }
+
   Future<void> _deletePlan(Map<String, dynamic> plan) async {
     final notificationId = plan['notificationId'];
     if (notificationId is num) {
@@ -1143,9 +1174,20 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
                   '${plan['note'] ?? ''}'
                   '${date == null ? '' : '\n${DateFormat('dd MMM yyyy, hh:mm a').format(date)}'}',
                 ),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _deletePlan(plan),
+                trailing: Wrap(
+                  spacing: 2,
+                  children: [
+                    IconButton(
+                      tooltip: 'Mark completed',
+                      icon: const Icon(Icons.check_circle_outline, color: Colors.green),
+                      onPressed: () => _completePlan(plan),
+                    ),
+                    IconButton(
+                      tooltip: 'Delete plan',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _deletePlan(plan),
+                    ),
+                  ],
                 ),
               ),
             );

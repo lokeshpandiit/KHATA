@@ -1094,6 +1094,12 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         _error('Extra pani ke minutes enter karein');
         return;
       }
+      if (_borrowedWater && _borrowedSource == 'Mix' &&
+          ((int.tryParse(_borrowedNaharMinutes.text.trim()) ?? 0) <= 0 ||
+           (int.tryParse(_borrowedKuaMinutes.text.trim()) ?? 0) <= 0)) {
+        _error('Mix pani mein Nahar aur Kua dono ke minutes alag enter karein');
+        return;
+      }
       if (_borrowedWater && _contactId == null) {
         _error('Pani kis se liya, contact select karein');
         return;
@@ -1140,6 +1146,16 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         final allPlotIds = selectedPlotEntries.map((entry) => entry.key).toList();
         var allocatedOwnMinutes = 0;
         var allocatedBorrowedMinutes = 0;
+        var allocatedNaharMinutes = 0;
+        var allocatedKuaMinutes = 0;
+        final totalNaharMinutes = _borrowedWater &&
+                (_borrowedSource == 'Nahar' || _borrowedSource == 'Mix')
+            ? (int.tryParse(_borrowedNaharMinutes.text.trim()) ?? 0)
+            : 0;
+        final totalKuaMinutes = _borrowedWater &&
+                (_borrowedSource == 'Kua' || _borrowedSource == 'Mix')
+            ? (int.tryParse(_borrowedKuaMinutes.text.trim()) ?? 0)
+            : 0;
         for (var index = 0; index < selectedPlotEntries.length; index++) {
           final entry = selectedPlotEntries[index];
           final plotMatches = _storage.records('plots').where((plot) => plot['id'] == entry.key).toList();
@@ -1153,8 +1169,20 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
                   ? borrowedMinutes - allocatedBorrowedMinutes
                   : (borrowedMinutes * entry.value ~/ totalSelectedKyaris))
               : 0;
+          final plotNaharMinutes = totalNaharMinutes == 0
+              ? 0
+              : (isLast
+                  ? totalNaharMinutes - allocatedNaharMinutes
+                  : (totalNaharMinutes * entry.value ~/ totalSelectedKyaris));
+          final plotKuaMinutes = totalKuaMinutes == 0
+              ? 0
+              : (isLast
+                  ? totalKuaMinutes - allocatedKuaMinutes
+                  : (totalKuaMinutes * entry.value ~/ totalSelectedKyaris));
           allocatedOwnMinutes += plotOwnMinutes;
           allocatedBorrowedMinutes += plotBorrowedMinutes;
+          allocatedNaharMinutes += plotNaharMinutes;
+          allocatedKuaMinutes += plotKuaMinutes;
           final plotRecord = Map<String, dynamic>.from(baseRecord)
             ..['id'] = '${batchId}_$index'
             ..['plotId'] = entry.key
@@ -1163,6 +1191,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
             ..['source'] = _source
             ..['ownMinutes'] = plotOwnMinutes
             ..['borrowedMinutes'] = plotBorrowedMinutes
+            ..['borrowedNaharMinutes'] = plotNaharMinutes
+            ..['borrowedKuaMinutes'] = plotKuaMinutes
             ..['borrowedWater'] = _borrowedWater
             ..['borrowedContact'] = (_borrowedWater && contact != null) ? contact['name'] : null
             ..['borrowedContactId'] = _borrowedWater ? _contactId : null
