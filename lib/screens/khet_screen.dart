@@ -2323,7 +2323,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
               : 'Contact: $_customerName · $_customerPhone'),
         ),
         const SizedBox(height: 12),
-        KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+        _tractorPlotScopeFields(),
         const SizedBox(height: 12),
         TextField(controller: _work, textCapitalization: TextCapitalization.sentences,
           decoration: const InputDecoration(labelText: 'Work done (ploughing, rotavator, sowing...)')),
