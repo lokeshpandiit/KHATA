@@ -137,11 +137,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final monthVendorTotal = vendorPurchases.fold<double>(
       0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['amount'] ?? row['price']),
     );
-    // Include payment made at the time of purchase. Later payment records
-    // are added separately below for the selected month.
-    final monthVendorPaid = vendorPurchases.fold<double>(
-      0, (sum, row) => sum + _amount(row['paidAmount']),
-    );
+    // Payments are allocated to each vendor's oldest bill first. Count the
+    // amount actually settled on the selected month's bills.
+    var monthVendorPaid = 0.0;
     final vendorIds = vendorPurchases.map((r)=>r['vendorId']).where((id)=>id!=null).toSet();
     final vendorPending = <Map<String,dynamic>>[];
     for(final vendorId in vendorIds){
@@ -150,11 +148,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       var payments=khet.where((r)=>r['type']=='KHET_PURCHASE_PAYMENT'&&r['vendorId']==vendorId)
         .fold<double>(0,(sum,r)=>sum+_amount(r['amount']));
       for(final purchase in purchases){
-        final base=(_amount(purchase['totalAmount'])-_amount(purchase['paidAmount'])).clamp(0,double.infinity).toDouble();
+        final initiallyPaid = _amount(purchase['paidAmount']);
+        final base=(_amount(purchase['totalAmount'])-initiallyPaid).clamp(0,double.infinity).toDouble();
         final applied=payments<base?payments:base;
         payments-=applied;
         final balance=base-applied;
-        if(balance>0&&thisMonth(purchase))vendorPending.add({...purchase,'dashboardBalance':balance,'pendingKind':'PURCHASE'});
+        if (thisMonth(purchase)) {
+          monthVendorPaid += initiallyPaid + applied;
+          if(balance>0)vendorPending.add({...purchase,'dashboardBalance':balance,'pendingKind':'PURCHASE'});
+        }
       }
     }
     final khetExpensePending = <Map<String, dynamic>>[];
@@ -218,7 +220,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '')??DateTime(9999)));
     final pendingTotal=pending.fold<double>(0,(sum,row)=>sum+_balance(row));
     final monthVendorPending = vendorPending.fold<double>(0,(sum,row)=>sum+_balance(row));
-    final monthVendorLaterPayments = khet.where((row)=>row['type']=='KHET_PURCHASE_PAYMENT'&&thisMonth(row)).fold<double>(0,(sum,row)=>sum+_amount(row['amount']));
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
     return ListView(
@@ -285,7 +286,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Card(child: ListTile(
           leading: const CircleAvatar(child: Icon(Icons.storefront_outlined)),
           title: Text('${DateFormat('MMMM yyyy').format(selectedDate)} · Dawai/Khaad purchases'),
-          subtitle: Text('Bought ${money.format(monthVendorTotal)} · Paid ${money.format(monthVendorPaid+monthVendorLaterPayments)} · Pending ${money.format(monthVendorPending)}'),
+          subtitle: Text('Bought ${money.format(monthVendorTotal)} · Paid ${money.format(monthVendorPaid)} · Pending ${money.format(monthVendorPending)}'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _MonthVendorPurchasesScreen(rows: vendorPurchases, allRows: khet, monthTitle: DateFormat('MMMM yyyy').format(selectedDate), money: money))),
         )),
