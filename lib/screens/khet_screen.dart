@@ -470,19 +470,25 @@ class _KhetScreenState extends State<KhetScreen> {
 
   Future<void> _recordTractorPayment(Map<String, dynamic> row) async {
     final controller = TextEditingController();
+    final noteController = TextEditingController();
     String direction = 'Diya';
+    DateTime paymentDate = DateTime.now();
+    final oldPaid = _amount(row['paidAmount']);
+    final total = _amount(row['totalAmount'] ?? row['price']);
+    final before = (total - oldPaid).clamp(0, double.infinity).toDouble();
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Payment entry'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
+          title: Text('Payment · ${row['customerName'] ?? row['ownerName'] ?? row['contact'] ?? 'Tractor'}'),
+          content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text('Total ₹${total.toStringAsFixed(0)} · Pehle baki ₹${before.toStringAsFixed(0)}'),
             DropdownButtonFormField<String>(
               value: direction,
               decoration: const InputDecoration(labelText: 'Payment type'),
               items: const [
                 DropdownMenuItem(value: 'Diya', child: Text('💸 Paise diye')),
-                DropdownMenuItem(value: 'Liya', child: Text('💰 Paise liye')),
+                DropdownMenuItem(value: 'Liya', child: Text('💰 Paise wapas liye')),
               ],
               onChanged: (v) => setDialogState(() => direction = v ?? direction),
             ),
@@ -490,15 +496,41 @@ class _KhetScreenState extends State<KhetScreen> {
               controller: controller,
               autofocus: true,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: direction == 'Diya' ? 'Amount given (₹)' : 'Amount received (₹)'),
+              decoration: InputDecoration(labelText: direction == 'Diya' ? 'Amount given (₹)' : 'Amount received back (₹)'),
             ),
-          ]),
+            TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note (optional)')),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.calendar_today),
+              label: Text('Date: ${DateFormat('dd MMM yyyy').format(paymentDate)}'),
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: dialogContext,
+                  initialDate: paymentDate,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime.now().add(const Duration(days: 3650)),
+                );
+                if (picked != null) setDialogState(() => paymentDate = picked);
+              },
+            ),
+          ])),
           actions: [
             TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
             FilledButton(
               onPressed: () {
-                final value = double.tryParse(controller.text.trim());
-                if (value != null && value > 0) Navigator.pop(dialogContext, {'amount': value, 'direction': direction});
+                final value = double.tryParse(controller.text.trim()) ?? 0;
+                final limit = direction == 'Diya' ? before : oldPaid;
+                if (value <= 0 || value > limit + 0.009) {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    SnackBar(content: Text('1 se ₹${limit.toStringAsFixed(0)} ke beech amount bharein')),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, {
+                  'amount': value,
+                  'direction': direction,
+                  'date': paymentDate,
+                  'note': noteController.text.trim(),
+                });
               },
               child: const Text('Save payment'),
             ),
@@ -507,35 +539,34 @@ class _KhetScreenState extends State<KhetScreen> {
       ),
     );
     controller.dispose();
+    noteController.dispose();
     if (result == null) return;
     final amount = result['amount'] as double;
     direction = result['direction'] as String;
-    final total = _amount(row['totalAmount'] ?? row['price']);
-    final oldPaid = _amount(row['paidAmount']);
-    if (direction == 'Diya' && amount > (total - oldPaid).clamp(0, double.infinity)) {
-      _error('Amount given cannot exceed pending balance ₹${(total - oldPaid).clamp(0, double.infinity).toStringAsFixed(0)}');
-      return;
-    }
-    if (direction == 'Liya' && amount > oldPaid) {
-      _error('Received amount cannot exceed previously given ₹${oldPaid.toStringAsFixed(0)}');
-      return;
-    }
     final paid = direction == 'Diya' ? oldPaid + amount : oldPaid - amount;
     final balance = (total - paid).clamp(0, double.infinity).toDouble();
+    final paymentDateIso = (result['date'] as DateTime).toIso8601String();
     final updated = Map<String, dynamic>.from(row)
       ..['paidAmount'] = paid
       ..['balance'] = balance
       ..['status'] = balance <= 0 ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING')
       ..['payments'] = [
         ...(row['payments'] as List? ?? const []),
-        {'amount': amount, 'direction': direction, 'date': DateTime.now().toIso8601String(), 'balanceBefore': (total - oldPaid).clamp(0, double.infinity), 'balanceAfter': balance},
+        {
+          'amount': amount,
+          'direction': direction,
+          'date': paymentDateIso,
+          'note': result['note'],
+          'balanceBefore': before,
+          'balanceAfter': balance,
+        },
       ]
       ..['updatedAt'] = DateTime.now().toIso8601String();
     await _storage.updateRecord('khet', row['id'] as String, updated);
     if (mounted) setState(() {});
   }
 
-  @override
+    @override
   Widget build(BuildContext context) {
     final months = availableMonths(_entries);
     if (!months.contains(_month)) _month = 'All months';
