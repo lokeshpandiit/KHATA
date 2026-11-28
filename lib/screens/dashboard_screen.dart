@@ -1788,47 +1788,82 @@ class _KhetVendorLedgerDashboardScreenState
 
   Future<void> pay() async {
     final controller = TextEditingController();
+    final noteController = TextEditingController();
     final before = balance;
-    final result = await showDialog<double>(
+    final paidLater = payments.fold<double>(0, (sum, row) => sum + n(row['amount']));
+    String direction = 'Diya';
+    DateTime paymentDate = DateTime.now();
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
         title: Text('Payment · ${widget.vendorName}'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Remaining: ₹${before.toStringAsFixed(0)}'),
+          Text('Current balance: ₹${before.toStringAsFixed(0)}'),
+          DropdownButtonFormField<String>(
+            value: direction,
+            decoration: const InputDecoration(labelText: 'Payment type'),
+            items: const [
+              DropdownMenuItem(value: 'Diya', child: Text('Paise diye')),
+              DropdownMenuItem(value: 'Liya', child: Text('Paise wapas liye')),
+            ],
+            onChanged: (value) => setDialog(() => direction = value ?? direction),
+          ),
           TextField(
             controller: controller,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Payment amount (full/partial)'),
+            decoration: InputDecoration(labelText: direction == 'Diya' ? 'Payment amount (full/partial)' : 'Refund received'),
           ),
+          TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note (optional)')),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.calendar_today),
+            label: Text('Date: ${DateFormat('dd MMM yyyy').format(paymentDate)}'),
+            onPressed: () async {
+              final picked = await showDatePicker(
+                context: ctx, initialDate: paymentDate,
+                firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 3650)),
+              );
+              if (picked != null) setDialog(() => paymentDate = picked);
+            },
+          ),
+          Text('Iske baad balance: ₹${(before + (direction == 'Diya' ? -n(controller.text) : n(controller.text))).toStringAsFixed(0)}'),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              final value = double.tryParse(controller.text.trim()) ?? 0;
-              if (value <= 0 || value > before) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  SnackBar(content: Text('1 se ₹${before.toStringAsFixed(0)} ke beech amount bharein')),
-                );
-                return;
-              }
-              Navigator.pop(ctx, value);
-            },
-            child: const Text('Save'),
-          ),
+          FilledButton(onPressed: () {
+            final value = double.tryParse(controller.text.trim()) ?? 0;
+            final limit = direction == 'Diya' ? before.clamp(0, double.infinity).toDouble() : paidLater.clamp(0, double.infinity).toDouble();
+            if (value <= 0 || value > limit + 0.009) {
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                SnackBar(content: Text('1 se ₹${limit.toStringAsFixed(0)} ke beech amount bharein')),
+              );
+              return;
+            }
+            Navigator.pop(ctx, {
+              'amount': value,
+              'direction': direction,
+              'date': paymentDate,
+              'note': noteController.text.trim(),
+            });
+          }, child: const Text('Save')),
         ],
-      ),
+      )),
     );
     controller.dispose();
+    noteController.dispose();
     if (result == null) return;
-    final after = (before - result).clamp(0, double.infinity).toDouble();
+    final rawAmount = (result['amount'] as num).toDouble();
+    direction = result['direction'] as String;
+    final signedAmount = direction == 'Diya' ? rawAmount : -rawAmount;
+    final after = before - signedAmount;
     await StorageBackupService.instance.addRecord('khet', {
       'id': DateTime.now().microsecondsSinceEpoch.toString(),
       'type': 'KHET_PURCHASE_PAYMENT',
       'vendorId': widget.vendorId,
       'vendorName': widget.vendorName,
-      'amount': result,
-      'date': DateTime.now().toIso8601String(),
+      'amount': signedAmount,
+      'direction': direction,
+      'date': (result['date'] as DateTime).toIso8601String(),
+      'note': result['note'],
       'allocationMethod': 'OLDEST_BILL_FIRST',
       'balanceBefore': before,
       'balanceAfter': after,
@@ -1836,7 +1871,7 @@ class _KhetVendorLedgerDashboardScreenState
     if (mounted) setState(() {});
   }
 
-  @override
+    @override
   Widget build(BuildContext context) {
     final bills = purchases
       ..sort((a, b) => (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
@@ -1880,7 +1915,7 @@ class _KhetVendorLedgerDashboardScreenState
           final after = row['balanceAfter'] == null ? null : n(row['balanceAfter']);
           return Card(child: ListTile(
             leading: const Icon(Icons.payments_outlined),
-            title: Text('Payment ${money.format(n(row['amount']))}'),
+            title: Text('${row['direction'] == 'Liya' ? 'Refund received' : 'Payment given'} ${money.format(n(row['amount']).abs())}'),
             subtitle: Text('${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}${before == null || after == null ? '' : '\\nPehle baki ${money.format(before)} · Baad mein baki ${money.format(after)}'}${(row['note'] ?? '').toString().trim().isEmpty ? '' : '\\n${row['note']}'}'),
           ));
         }),
