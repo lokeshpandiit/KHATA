@@ -2595,17 +2595,26 @@ class _KhetVendorLedgerScreenState extends State<KhetVendorLedgerScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(onPressed: () {
             final n = double.tryParse(amount.text);
-            if (n != null && n > 0) Navigator.pop(ctx, {'amount': n, 'note': note.text, 'date': date});
+            if (n == null || n <= 0 || n > balance) {
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                SnackBar(content: Text('1 se ₹${balance.toStringAsFixed(0)} ke beech payment amount bharein')));
+              return;
+            }
+            Navigator.pop(ctx, {'amount': n, 'note': note.text, 'date': date});
           }, child: const Text('Save')),
         ],
       )));
     amount.dispose(); note.dispose();
     if (result == null) return;
+    final balanceBefore = balance;
+    final paidNow = (result['amount'] as num).toDouble();
     await _storage.addRecord('khet', {
       'id': DateTime.now().microsecondsSinceEpoch.toString(), 'type': 'KHET_PURCHASE_PAYMENT',
-      'vendorId': widget.vendorId, 'vendorName': widget.vendorName, 'amount': result['amount'],
+      'vendorId': widget.vendorId, 'vendorName': widget.vendorName, 'amount': paidNow,
       'date': (result['date'] as DateTime).toIso8601String(), 'note': result['note'],
-      'allocationMethod': 'OLDEST_BILL_FIRST', 'balanceBefore': balance, 'balanceAfter': (balance - (result['amount'] as num).toDouble()).clamp(0, double.infinity)
+      'allocationMethod': 'OLDEST_BILL_FIRST',
+      'balanceBefore': balanceBefore,
+      'balanceAfter': (balanceBefore - paidNow).clamp(0, double.infinity)
     });
     if (mounted) setState(() {});
   }
@@ -2639,8 +2648,11 @@ class _KhetVendorLedgerScreenState extends State<KhetVendorLedgerScreen> {
             final r = rows[i];
             final isPurchase = r['type'] == 'KHET_PURCHASE';
             final date = DateTime.tryParse((r['date'] ?? '').toString()) ?? DateTime.now();
+            final paymentBalance = r['balanceAfter'] == null
+                ? ''
+                : ' · Pehle baki ₹${_n(r['balanceBefore']).toStringAsFixed(0)} · Baad mein baki ₹${_n(r['balanceAfter']).toStringAsFixed(0)}';
             final subtitle = '${dateLabel(date)}'
-              '${isPurchase ? ' · Bill ₹${_n(r['totalAmount']).toStringAsFixed(0)} · Paid ₹${_n(r['paidAmount']).toStringAsFixed(0)}' : ''}'
+              '${isPurchase ? ' · Bill ₹${_n(r['totalAmount']).toStringAsFixed(0)} · Paid ₹${_n(r['paidAmount']).toStringAsFixed(0)} · Pending ₹${(_n(r['totalAmount']) - _n(r['paidAmount'])).clamp(0, double.infinity).toStringAsFixed(0)}' : paymentBalance}'
               '${(r['note'] ?? '').toString().isEmpty ? '' : '\\n${r['note']}'}';
             return ListTile(
               leading: Icon(isPurchase ? Icons.shopping_bag : Icons.payments),
