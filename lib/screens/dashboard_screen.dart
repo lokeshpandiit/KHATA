@@ -84,6 +84,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : (row['vendorName'] ?? row['contact'] ?? '').toString();
             return <String, dynamic>{...row, 'personName': person, 'ledgerSource': 'KHET'};
           }).where((row) => (row['personName'] ?? '').toString().trim().isNotEmpty),
+      ...khet.where((row) => row['type'] == 'KUA' && _amount(row['cashAmount']) > 0)
+          .map((row) => <String, dynamic>{
+            ...row,
+            'personName': row['contact'] ?? 'Samne wala',
+            'totalAmount': _amount(row['cashAmount']),
+            'amount': _amount(row['cashAmount']),
+            'paidAmount': _amount(row['cashPaid']),
+            'ledgerSource': 'KHET',
+          }),
     ];
     final monthPersonRows = allPersonLedgerRows.where(thisMonth).toList();
     final activePersonCount = monthPersonRows
@@ -314,6 +323,8 @@ class _MonthPersonLedgerScreen extends StatelessWidget {
       return _amount(row['paidAmount']) - total;
     }
     if (type == 'KHET_PURCHASE_PAYMENT') return _amount(row['amount']);
+    if (type == 'KUA') return _amount(row['cashAmount']) - _amount(row['cashPaid']);
+    if (type == 'KUA') return _amount(row['cashAmount']) - _amount(row['cashPaid']);
     final amount = _amount(row['amount']);
     return row['direction'] == 'PAID' ? amount : -amount;
   }
@@ -414,6 +425,7 @@ class _PersonMonthDetailScreen extends StatelessWidget {
     if (row['entryType'] == 'EXPENSE') return '${row['expenseCategory'] ?? 'Khet'} · ${row['title'] ?? 'Kharcha'}';
     if (row['type'] == 'KHET_PURCHASE') return 'खरीद · ${row['title'] ?? 'Samaan'}';
     if (row['type'] == 'KHET_PURCHASE_PAYMENT') return 'दुकानदार को भुगतान';
+    if (row['type'] == 'KUA') return 'कुएँ का पानी · Cash/Rent';
     if (row['type'] == 'TRACTOR') return 'ट्रैक्टर · ${row['work'] ?? row['title'] ?? 'काम'}';
     return row['direction'] == 'PAID' ? 'आपने पैसे दिए' : 'आपको पैसे मिले';
   }
@@ -433,6 +445,12 @@ class _PersonMonthDetailScreen extends StatelessWidget {
       if (plot.isNotEmpty) parts.add(plot);
       final category = row['expenseCategory'] ?? row['purchaseCategory'];
       if (category != null && category.toString().isNotEmpty) parts.add(category.toString());
+    } else if (row['type'] == 'KUA') {
+      final total = _amount(row['cashAmount']);
+      final paid = _amount(row['cashPaid']);
+      parts.add('Cash/Rent ${money.format(total)} · Mila ${money.format(paid)} · Baki ${money.format((total - paid).clamp(0, double.infinity))}');
+      final history = (row['payments'] as List? ?? const []).whereType<Map>().toList();
+      if (history.isNotEmpty) parts.add('Payment history: ${history.map((p) { final dt = DateTime.tryParse((p['date'] ?? '').toString()); return '${dt == null ? '' : DateFormat('dd MMM yyyy').format(dt)} ${money.format(_amount(p['amount']))} · baki ${p['balanceAfter'] == null ? '' : money.format(_amount(p['balanceAfter']))}'; }).join(' → ')}');
     } else if (row['type'] == 'KHET_PURCHASE_PAYMENT') {
       parts.add('Payment ${money.format(_amount(row['amount']))}');
       if (row['balanceBefore'] != null || row['balanceAfter'] != null) parts.add('Pehle baki ${money.format(_amount(row['balanceBefore']))} · baad mein ${money.format(_amount(row['balanceAfter']))}');
