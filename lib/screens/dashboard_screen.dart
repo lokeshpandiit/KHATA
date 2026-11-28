@@ -50,6 +50,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _khetCostAmount(Map<String, dynamic> row) =>
       _amount(row['totalAmount'] ?? row['amount'] ?? row['price']);
 
+  int _kuaWaterOwedMinutes(Map<String, dynamic> row) {
+    final explicit = _amount(row['waterOwedMinutes'] ?? row['exchangeMinutes']).toInt();
+    if (explicit > 0) return explicit;
+    final wellMinutes = row['wellMinutes'];
+    if (wellMinutes is Map) {
+      return wellMinutes.values.fold<int>(0, (sum, value) => sum + _amount(value).toInt());
+    }
+    return 0;
+  }
+
+  int _kuaWaterReturnedMinutes(Map<String, dynamic> row) {
+    final history = row['waterExchangeHistory'];
+    if (history is List) {
+      return history.fold<int>(0, (sum, item) =>
+          sum + (item is Map ? _amount(item['minutes']).toInt() : 0));
+    }
+    return _amount(row['waterExchangedMinutes']).toInt();
+  }
+
   @override
   Widget build(BuildContext context) {
     final storage = StorageBackupService.instance;
@@ -233,7 +252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _PendingPaymentsScreen(rows: pending, waterRows: khet.where((r) => (r['type'] == 'PANI' && r['waterPaymentPending'] == true) || (r['type'] == 'KUA' && _amount(r['waterRemainingMinutes'] ?? r['waterOwedMinutes'] ?? r['exchangeMinutes']) > 0)).toList(), money: money, storage: storage, monthTitle: DateFormat('MMMM yyyy').format(selectedDate)),
+              builder: (_) => _PendingPaymentsScreen(rows: pending, waterRows: khet.where((r) => (r['type'] == 'PANI' && r['waterPaymentPending'] == true) || (r['type'] == 'KUA' && _kuaWaterOwedMinutes(r) > _kuaWaterReturnedMinutes(r))).toList(), money: money, storage: storage, monthTitle: DateFormat('MMMM yyyy').format(selectedDate)),
             )),
             child: _MetricCard(title: 'Pending payments', value: money.format(pendingTotal), icon: Icons.pending_actions, tint: const Color(0xFFE5F2EC)),
           )),
@@ -898,7 +917,11 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
 
   int _waterOwedMinutes(Map<String, dynamic> row) {
     if (row['type'] == 'KUA') {
-      return _amount(row['waterOwedMinutes'] ?? row['exchangeMinutes']).toInt();
+      final explicit = _amount(row['waterOwedMinutes'] ?? row['exchangeMinutes']).toInt();
+      if (explicit > 0) return explicit;
+      final wellMinutes = row['wellMinutes'];
+      if (wellMinutes is Map) return wellMinutes.values.fold<int>(0, (sum, value) => sum + _amount(value).toInt());
+      return 0;
     }
     final nahar = _amount(row['borrowedNaharMinutes']).toInt();
     final kua = _amount(row['borrowedKuaMinutes']).toInt();
