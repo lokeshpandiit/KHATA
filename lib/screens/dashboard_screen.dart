@@ -354,10 +354,43 @@ class _KhetExpensesScreenState extends State<_KhetExpensesScreen>{
   final monthly=expenses.where((r){final d=DateTime.tryParse(r['date']?.toString()??'');return d!=null && _monthKey(d)==selected;}).toList()..sort((a,b)=>(DateTime.tryParse(b['date']?.toString()??'')??DateTime(0)).compareTo(DateTime.tryParse(a['date']?.toString()??'')??DateTime(0)));
   final total=monthly.fold<double>(0,(s,r)=>s+amount(r['price']));
   return Scaffold(appBar:AppBar(title:const Text('All Khet Expenses')),body:ListView(padding:const EdgeInsets.all(16),children:[
-   if(monthKeys.isNotEmpty) Card(child:Padding(padding:const EdgeInsets.symmetric(horizontal:12,vertical:8),child:DropdownButtonHideUnderline(child:DropdownButton<String>(isExpanded:true,value:selected,hint:const Text('Month choose karein'),items:monthKeys.map((key){final parts=key.split('-');final date=DateTime(int.parse(parts[0]),int.parse(parts[1]));return DropdownMenuItem(value:key,child:Text(DateFormat('MMMM yyyy').format(date)));}).toList(),onChanged:(v)=>setState(()=>_selectedMonth=v)))),
-   Card(child:ListTile(title:Text('${DateFormat('MMMM yyyy').format(DateTime(int.parse(selected?.split('-')[0]??'2000'),int.parse(selected?.split('-')[1]??'1')))} · ${monthly.length} expense records'),trailing:Text(widget.money.format(total),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18)))),
-   if(monthly.isEmpty)const Center(child:Padding(padding:EdgeInsets.all(30),child:Text('Is month ka koi expense record nahi hai.'))),
-   ...monthly.map((r){final d=DateTime.tryParse(r['date']?.toString()??'');return Card(child:ListTile(title:Text(r['type']?.toString()??'Expense'),subtitle:Text('${r['description']??r['name']??''}${d==null?'':'\n'+DateFormat('dd MMM yyyy').format(d)}'),trailing:Text(widget.money.format(amount(r['price'])))));})
+    if (monthKeys.isNotEmpty)
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              isExpanded: true,
+              value: selected,
+              hint: const Text('Month choose karein'),
+              items: monthKeys.map((key) {
+                final parts = key.split('-');
+                final date = DateTime(int.parse(parts[0]), int.parse(parts[1]));
+                return DropdownMenuItem(value: key, child: Text(DateFormat('MMMM yyyy').format(date)));
+              }).toList(),
+              onChanged: (v) => setState(() => _selectedMonth = v),
+            ),
+          ),
+        ),
+      ),
+    Card(
+      child: ListTile(
+        title: Text('${selected == null ? 'All months' : DateFormat('MMMM yyyy').format(DateTime(int.parse(selected.split('-')[0]), int.parse(selected.split('-')[1])))} · ${monthly.length} expense records'),
+        trailing: Text(widget.money.format(total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+      ),
+    ),
+    if (monthly.isEmpty)
+      const Center(child: Padding(padding: EdgeInsets.all(30), child: Text('Is month ka koi expense record nahi hai.'))),
+    ...monthly.map((r) {
+      final d = DateTime.tryParse(r['date']?.toString() ?? '');
+      return Card(
+        child: ListTile(
+          title: Text(r['type']?.toString() ?? 'Expense'),
+          subtitle: Text('${r['description'] ?? r['name'] ?? ''}${d == null ? '' : '\n' + DateFormat('dd MMM yyyy').format(d)}'),
+          trailing: Text(widget.money.format(amount(r['price']))),
+        ),
+      );
+    }),
   ]));
  }
 }
