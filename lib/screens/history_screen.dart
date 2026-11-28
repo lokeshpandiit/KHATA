@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../services/storage_backup_service.dart';
+import '../widgets/khata_widgets.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -25,7 +26,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return DateTime.now();
   }
 
-  String _str(dynamic value) => value is String ? value.trim() : '';
+  String _str(dynamic value) => cleanDisplayText(value).trim();
   String _minutes(dynamic value) {
     final m = value is int ? value : int.tryParse('$value') ?? 0;
     return m >= 60 ? '${m ~/ 60} hr ${m % 60} min' : '$m min';
