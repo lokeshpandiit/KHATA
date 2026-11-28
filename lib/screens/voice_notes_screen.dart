@@ -36,10 +36,49 @@ class _VoiceNotesScreenState extends State<VoiceNotesScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
+  String _makeSmartTitle(String text) {
+    final t = text.trim();
+    if (t.isEmpty) return '';
+    final lower = t.toLowerCase();
+
+    // Water transactions: create a meaningful title instead of copying the transcript.
+    final source = lower.contains('नहर') || lower.contains('nahar') || lower.contains('canal')
+        ? 'नहर'
+        : (lower.contains('कुआ') || lower.contains('कुए') || lower.contains('ku') || lower.contains('well')
+            ? 'कुएँ'
+            : (lower.contains('ट्यूबवेल') || lower.contains('tubewell') || lower.contains('tube well') ? 'ट्यूबवेल' : null));
+    if (source != null && (lower.contains('पानी') || lower.contains('water') || lower.contains('minut') || lower.contains('मिनट'))) {
+      final action = (lower.contains('लिया') || lower.contains('liye') || lower.contains('liya') || lower.contains('ले') || lower.contains('used'))
+          ? 'पानी लिया'
+          : ((lower.contains('दिया') || lower.contains('diya') || lower.contains('दे')) ? 'पानी दिया' : 'पानी का लेन-देन');
+      String? person;
+      final patterns = [
+        RegExp(r'(?:से|se)\\s+([\\p{L}]+(?:\\s+[\\p{L}]+){0,2})', unicode: true),
+        RegExp(r'([\\p{L}]+(?:\\s+[\\p{L}]+){0,2})\\s+(?:से|se)', unicode: true),
+      ];
+      for (final pattern in patterns) {
+        final match = pattern.firstMatch(t);
+        if (match != null) {
+          person = match.group(1)?.trim();
+          break;
+        }
+      }
+      // Avoid capturing transaction words as a person's name.
+      if (person != null && RegExp(r'(पानी|नहर|कुए|मिनट|लिए|लिया|दिया|आज|कल|काम|से)', unicode: true).hasMatch(person)) {
+        person = null;
+      }
+      return person == null || person.isEmpty ? '$source का $action' : '$source का $action - $person से';
+    }
+    if (lower.contains('पैसे') || lower.contains('payment') || lower.contains('पेमेंट') || lower.contains('जमा') || lower.contains('उधार')) {
+      return 'पैसों का लेन-देन';
+    }
+    return 'Voice Note';
+  }
+
   void suggestTitle() {
     if (title.text.trim().isNotEmpty) return;
-    final words = transcript.text.trim().split(RegExp(r'\\s+')).take(5).join(' ');
-    if (words.isNotEmpty) title.text = words;
+    final suggested = _makeSmartTitle(transcript.text);
+    if (suggested.isNotEmpty) title.text = suggested;
   }
   Future<void> toggleSpeech() async {
     if (!speechReady) { showMessage('Speech recognition available nahi hai.'); return; }
@@ -69,8 +108,8 @@ class _VoiceNotesScreenState extends State<VoiceNotesScreen> {
     setState(() => busy = true);
     try {
       final now = DateTime.now();
-      final words = transcript.text.trim().split(RegExp(r'\\s+')).take(5).join(' ');
-      final noteTitle = title.text.trim().isNotEmpty ? title.text.trim() : (words.isNotEmpty ? words : 'Voice Note ${now.day}/${now.month}/${now.year}');
+      final autoTitle = _makeSmartTitle(transcript.text);
+      final noteTitle = title.text.trim().isNotEmpty ? title.text.trim() : (autoTitle.isNotEmpty ? autoTitle : 'Voice Note ${now.day}/${now.month}/${now.year}');
       String? audioPath;
       if (tempAudio != null && await File(tempAudio!).exists()) audioPath = await storage.keepFile(tempAudio!, folder: 'VoiceNotes', filename: 'voice.m4a');
       await storage.addRecord('voiceNotes', {'id': now.microsecondsSinceEpoch.toString(), 'title': noteTitle, 'transcript': transcript.text.trim(), 'audio': audioPath, 'date': now.toIso8601String()});
