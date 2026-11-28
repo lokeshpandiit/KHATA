@@ -22,17 +22,11 @@ class HisabScreen extends StatefulWidget {
 
 class _HisabScreenState extends State<HisabScreen> {
   final _storage = StorageBackupService.instance;
-  final _search = TextEditingController();
   String _category = 'All';
   String _month = 'All months';
 
   List<Map<String, dynamic>> get _rows => _storage.records('hisabs');
 
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
 
   Future<void> _addHisab() async {
     await Navigator.of(context).push(
@@ -51,16 +45,12 @@ class _HisabScreenState extends State<HisabScreen> {
   }
 
   List<Map<String, dynamic>> get _filtered {
-    final query = _search.text.trim().toLowerCase();
     return _rows.where((row) {
       final date = DateTime.tryParse(row['date'] as String? ?? '');
       final categoryMatch = _category == 'All' || row['category'] == _category;
       final monthMatch = _month == 'All months' ||
           (date != null && monthKey(date) == _month);
-      final searchable =
-          '${row['title'] ?? ''} ${row['note'] ?? ''} ${row['category'] ?? ''} ${row['personName'] ?? ''}'
-              .toLowerCase();
-      return categoryMatch && monthMatch && searchable.contains(query);
+      return categoryMatch && monthMatch;
     }).toList()
       ..sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
   }
@@ -130,8 +120,6 @@ class _HisabScreenState extends State<HisabScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
             child: Column(
               children: [
-                searchField((_) => setState(() {})),
-                const SizedBox(height: 10),
                 monthFilter(_month, months, (value) {
                   if (value != null) setState(() => _month = value);
                 }),
