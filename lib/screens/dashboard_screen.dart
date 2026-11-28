@@ -132,7 +132,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final monthPani = khet.where(thisMonth)
         .where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON')
         .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
-    final tractorPending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0).toList();
+    final tractorPending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0).map((row) => <String, dynamic>{...row, 'pendingKind': 'TRACTOR', 'pendingSource': 'khet'}).toList();
     final vendorPurchases = khet.where((row) => row['type'] == 'KHET_PURCHASE' && thisMonth(row)).toList();
     final monthVendorTotal = vendorPurchases.fold<double>(
       0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['amount'] ?? row['price']),
@@ -155,7 +155,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final balance=base-applied;
         if (thisMonth(purchase)) {
           monthVendorPaid += initiallyPaid + applied;
-          if(balance>0)vendorPending.add({...purchase,'dashboardBalance':balance,'pendingKind':'PURCHASE'});
+          if(balance>0)vendorPending.add({...purchase,'dashboardBalance':balance,'pendingKind':'PURCHASE','pendingSource':'khet'});
         }
       }
     }
@@ -189,6 +189,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ...expense,
             'dashboardBalance': remaining,
             'pendingKind': 'KHET_EXPENSE',
+            'pendingSource': 'hisabs',
           });
         }
       }
@@ -205,7 +206,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final applied = available < base ? available : base;
         available -= applied;
         final balance = base - applied;
-        if (balance > 0.009) vendorPendingAll.add({...purchase, 'dashboardBalance': balance, 'pendingKind': 'PURCHASE'});
+        if (balance > 0.009) vendorPendingAll.add({...purchase, 'dashboardBalance': balance, 'pendingKind': 'PURCHASE', 'pendingSource': 'khet'});
       }
     }
     final kuaCashPending = khet.where((row) => row['type'] == 'KUA' && _amount(row['cashBalance'] ?? (_amount(row['cashAmount']) - _amount(row['cashPaid']))) > 0.009).map((row) => <String, dynamic>{
@@ -214,6 +215,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'paidAmount': _amount(row['cashPaid']),
       'balance': _amount(row['cashBalance'] ?? (_amount(row['cashAmount']) - _amount(row['cashPaid']))),
       'pendingKind': 'KUA_CASH',
+      'pendingSource': 'khet',
     }).toList();
     final pending=[...tractorPending,...vendorPendingAll,...khetExpensePending,...kuaCashPending]
       ..sort((a,b)=>(DateTime.tryParse(a['dueDate'] as String? ?? '')??DateTime(9999))
@@ -991,7 +993,8 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
   }
 
   Future<void> _recordExpensePayment(Map<String, dynamic> pendingRow) async {
-    final source = widget.storage.records('khet')
+    final sourceTable = pendingRow['pendingSource'] == 'hisabs' ? 'hisabs' : 'khet';
+    final source = widget.storage.records(sourceTable)
         .where((r) => r['id']?.toString() == pendingRow['id']?.toString())
         .toList();
     if (source.isEmpty) return;
@@ -1001,6 +1004,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     final before = (total - paid).clamp(0, double.infinity).toDouble();
     final amountController = TextEditingController();
     final noteController = TextEditingController();
+    String direction = 'Diya';
     DateTime paymentDate = DateTime.now();
     final oldHistory = (original['payments'] as List? ?? const [])
         .whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
@@ -1008,21 +1012,37 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
         ? 'Abhi payment history nahi hai.'
         : oldHistory.map((p) {
             final dt = DateTime.tryParse((p['date'] ?? '').toString());
-            return '${dt == null ? '' : DateFormat('dd MMM yyyy').format(dt)} · ₹${_amount(p['amount']).toStringAsFixed(0)} diya · baki ₹${_amount(p['balanceAfter']).toStringAsFixed(0)}${(p['note'] ?? '').toString().trim().isEmpty ? '' : ' · ${p['note']}'}';
+            final b = p['balanceBefore'] == null ? '' : ' · Pehle baki ₹${_amount(p['balanceBefore']).toStringAsFixed(0)}';
+            final a = p['balanceAfter'] == null ? '' : ' · Baad mein baki ₹${_amount(p['balanceAfter']).toStringAsFixed(0)}';
+            return '${dt == null ? '' : DateFormat('dd MMM yyyy').format(dt)} · ${p['direction'] ?? 'Diya'} ₹${_amount(p['amount']).toStringAsFixed(0)}$b$a';
           }).join('\n');
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
-        title: Text('Payment · ${original['personName'] ?? original['vendorName'] ?? original['contact'] ?? 'Person'}'),
+        title: Text('Payment · ${original['personName'] ?? original['vendorName'] ?? original['customerName'] ?? original['contact'] ?? 'Person'}'),
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text('Total: ${widget.money.format(total)}\nPehle baki: ${widget.money.format(before)}', style: const TextStyle(fontWeight: FontWeight.w600)),
-          TextField(controller: amountController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Ab kitne paise diye?'), onChanged: (_) => setDialog(() {})),
-          Text('Is payment ke baad baki: ${widget.money.format((before - (_amount(amountController.text))).clamp(0, double.infinity))}'),
+          DropdownButtonFormField<String>(
+            value: direction,
+            decoration: const InputDecoration(labelText: 'Payment type'),
+            items: const [
+              DropdownMenuItem(value: 'Diya', child: Text('Paise diye')),
+              DropdownMenuItem(value: 'Liya', child: Text('Paise wapas liye')),
+            ],
+            onChanged: (v) => setDialog(() => direction = v ?? direction),
+          ),
+          TextField(controller: amountController, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: direction == 'Diya' ? 'Kitne paise diye?' : 'Kitne paise wapas mile?'),
+            onChanged: (_) => setDialog(() {})),
+          Text('Iske baad baki: ${widget.money.format(direction == 'Diya' ? (before - _amount(amountController.text)).clamp(0, double.infinity) : before + _amount(amountController.text))}'),
           TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note (optional)')),
-          OutlinedButton.icon(icon: const Icon(Icons.calendar_today), label: Text('Date: ${DateFormat('dd MMM yyyy').format(paymentDate)}'), onPressed: () async {
-            final picked = await showDatePicker(context: ctx, initialDate: paymentDate, firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 3650)));
-            if (picked != null) setDialog(() => paymentDate = picked);
-          }),
+          OutlinedButton.icon(icon: const Icon(Icons.calendar_today),
+            label: Text('Date: ${DateFormat('dd MMM yyyy').format(paymentDate)}'),
+            onPressed: () async {
+              final picked = await showDatePicker(context: ctx, initialDate: paymentDate,
+                firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 3650)));
+              if (picked != null) setDialog(() => paymentDate = picked);
+            }),
           const Divider(),
           Align(alignment: Alignment.centerLeft, child: Text('Payment history\n$historyText')),
         ])),
@@ -1030,11 +1050,13 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(onPressed: () {
             final amount = _amount(amountController.text);
-            if (amount <= 0 || amount > before + 0.009) {
-              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('1 se ${widget.money.format(before)} ke beech payment bharein')));
+            final limit = direction == 'Diya' ? before : paid;
+            if (amount <= 0 || amount > limit + 0.009) {
+              final label = direction == 'Diya' ? 'baki' : 'pehle diye gaye paise';
+              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('1 se ${widget.money.format(limit)} ke beech amount bharein ($label)')));
               return;
             }
-            Navigator.pop(ctx, {'amount': amount, 'date': paymentDate, 'note': noteController.text.trim()});
+            Navigator.pop(ctx, {'amount': amount, 'date': paymentDate, 'note': noteController.text.trim(), 'direction': direction});
           }, child: const Text('Save payment')),
         ],
       )),
@@ -1042,31 +1064,36 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     amountController.dispose(); noteController.dispose();
     if (result == null) return;
     final amount = (result['amount'] as num).toDouble();
-    final after = (before - amount).clamp(0, double.infinity).toDouble();
+    direction = result['direction'] as String;
+    final newPaid = direction == 'Diya' ? paid + amount : (paid - amount).clamp(0, double.infinity).toDouble();
+    final after = (total - newPaid).clamp(0, double.infinity).toDouble();
     final history = oldHistory..add({
       'amount': amount,
-      'direction': 'Diya',
+      'direction': direction,
       'date': (result['date'] as DateTime).toIso8601String(),
       'note': result['note'],
       'balanceBefore': before,
       'balanceAfter': after,
     });
     final updated = Map<String, dynamic>.from(original)
-      ..['paidAmount'] = paid + amount
+      ..['paidAmount'] = newPaid
       ..['payments'] = history
       ..['balance'] = after
-      ..['paymentStatus'] = after <= 0.009 ? 'PAID' : 'PARTIAL'
+      ..['paymentStatus'] = after <= 0.009 ? 'PAID' : (newPaid > 0 ? 'PARTIAL' : 'PENDING')
       ..['updatedAt'] = DateTime.now().toIso8601String();
-    await widget.storage.updateRecord('khet', original['id'].toString(), updated);
-    final index = widget.rows.indexWhere((r) => r['id']?.toString() == original['id'].toString());
+    await widget.storage.updateRecord(sourceTable, original['id'].toString(), updated);
+    final index = widget.rows.indexWhere((r) => r['id']?.toString() == original['id']?.toString());
     if (index >= 0) {
-      if (after <= 0.009) widget.rows.removeAt(index);
-      else widget.rows[index] = {...widget.rows[index], 'paidAmount': paid + amount, 'balance': after, 'dashboardBalance': after};
+      if (after <= 0.009) {
+        widget.rows.removeAt(index);
+      } else {
+        widget.rows[index] = {...widget.rows[index], 'paidAmount': newPaid, 'balance': after, 'dashboardBalance': after};
+      }
     }
     if (mounted) setState(() {});
   }
 
-  Future<void> _recordKuaCashPayment(Map<String, dynamic> pendingRow) async {
+    Future<void> _recordKuaCashPayment(Map<String, dynamic> pendingRow) async {
     final matches = widget.storage.records('khet')
         .where((r) => r['id']?.toString() == pendingRow['id']?.toString() && r['type'] == 'KUA')
         .toList();
@@ -1344,7 +1371,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
         children: [
           Card(
             child: ListTile(
-              title: const Text('Pending Payments (Tractor + Khet Purchase)'),
+              title: const Text('Pending Payments (Tractor + Khet Expenses + Purchase + Kua)'),
               subtitle: Text('${widget.rows.length} records'),
               trailing: Text(
                 widget.money.format(pendingTotal),
