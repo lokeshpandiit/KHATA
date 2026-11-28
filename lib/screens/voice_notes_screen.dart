@@ -102,7 +102,7 @@ class _VoiceNotesScreenState extends State<VoiceNotesScreen> {
         .replaceAll('३', '3').replaceAll('४', '4').replaceAll('५', '5')
         .replaceAll('६', '6').replaceAll('७', '7').replaceAll('८', '8')
         .replaceAll('९', '9');
-    final matches = RegExp(r'(?<![A-Za-z])(?:₹|rs\\.?\\s*)?([0-9]+(?:,[0-9]{3})*(?:\\.[0-9]+)?)(?![A-Za-z])', caseSensitive: false).allMatches(normalized);
+    final matches = RegExp(r'(?<![A-Za-z])(?:₹|rs\.?\s*)?([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?)(?![A-Za-z])', caseSensitive: false).allMatches(normalized);
     if (matches.isEmpty) return null;
     // Prefer a number explicitly tied to rupees/amount; otherwise use the first number.
     for (final match in matches) {
@@ -110,8 +110,13 @@ class _VoiceNotesScreenState extends State<VoiceNotesScreen> {
       if (value == null) continue;
       final after = normalized.substring(match.end).toLowerCase();
       final before = normalized.substring(0, match.start).toLowerCase();
-      if (after.startsWith(RegExp(r'\\s*(रुपये|रुपए|रुपया|rs|rupees|रू)')) ||
-          before.endsWith(RegExp(r'(₹|rs\\.?\\s*)'))) return value;
+      if (after.startsWith(RegExp(r'\s*(रुपये|रुपए|रुपया|rs|rupees|रू)')) ||
+          RegExp(r'(₹|rs\.?\s*)) return value;
+    }
+    return matches.first.group(1)?.replaceAll(',', '');
+  }
+
+).hasMatch(before)) return value;
     }
     return matches.first.group(1)?.replaceAll(',', '');
   }
