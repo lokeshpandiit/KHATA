@@ -73,6 +73,38 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
     }
   }
 
+  Future<void> _showWaterDetails(Map<String, dynamic> row, int totalKyaris) async {
+    final date = _date(row);
+    final minutes = (row['minutes'] as num?)?.toInt() ?? 0;
+    final source = (row['source'] ?? row['wellType'] ?? 'Paani').toString();
+    final direction = (row['direction'] ?? '').toString();
+    final contact = (row['contact'] ?? row['borrowedContact'] ?? '').toString();
+    final wet = (row['wetKyaris'] as num?)?.toInt() ?? 0;
+    final total = (row['totalKyarisSnapshot'] as num?)?.toInt() ?? totalKyaris;
+    final remaining = (row['remainingKyaris'] as num?)?.toInt() ?? (total - wet).clamp(0, total);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(date == null ? 'Paani details' : DateFormat('dd MMM yyyy').format(date)),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _line('Paani', formatMinutes(minutes)),
+          _line('Source', source),
+          if (direction.isNotEmpty) _line('Apna / liya / diya', direction),
+          if (contact.isNotEmpty) _line('Kis se', contact),
+          if (row['borrowedSource'] != null) _line('Liye paani ka source', row['borrowedSource'].toString()),
+          if (row['plotId'] != null) _line('Kila', plotLabelForId(StorageBackupService.instance, row['plotId'])),
+          if (row['wetKyaris'] != null) _line('Bheegi kyari', '$wet / $total'),
+          if (row['remainingKyaris'] != null) _line('Baaki kyari', remaining.toString()),
+          if ((row['note'] ?? '').toString().trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Note: ${row['note']}'),
+          ],
+        ]),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Close'))],
+      ),
+    );
+  }
+
   String _seasonYear(Map<String, dynamic> row) {
     final season = (row['season'] ?? '').toString();
     final year = row['year'];
@@ -227,11 +259,29 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                       )).toList()),
                   _section('Paani history', pani.isEmpty
                     ? [const Text('Abhi paani ki entry nahi hai.')]
-                    : pani.map((row) => _activity(
-                        row,
-                        formatMinutes((row['minutes'] as num?)?.toInt() ?? 0) + ' · ' + (row['source'] ?? '').toString(),
-                        'Bheegi ' + (row['wetKyaris'] ?? 0).toString() + ' / ' + (row['totalKyarisSnapshot'] ?? totalKyaris).toString() + ', baaki ' + (row['remainingKyaris'] ?? '-').toString(),
-                      )).toList()),
+                    : pani.map((row) {
+                        final date = _date(row);
+                        final dateText = date == null ? 'Date nahi' : DateFormat('dd MMM yyyy').format(date);
+                        final minutes = (row['minutes'] as num?)?.toInt() ?? 0;
+                        final source = (row['source'] ?? row['wellType'] ?? 'Paani').toString();
+                        final direction = (row['direction'] ?? '').toString();
+                        final contact = (row['contact'] ?? row['borrowedContact'] ?? '').toString();
+                        final label = [
+                          formatMinutes(minutes),
+                          source,
+                          if (direction.isNotEmpty) direction,
+                          if (contact.isNotEmpty) 'Se: $contact',
+                        ].join(' · ');
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: const Icon(Icons.water_drop_outlined),
+                          title: Text(dateText, style: const TextStyle(fontWeight: FontWeight.w700)),
+                          subtitle: Text(label),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => _showWaterDetails(row, totalKyaris),
+                        );
+                      }).toList()),
                 ]),
               ),
               const SizedBox(height: 8),
