@@ -576,115 +576,127 @@ class _PersonMonthDetailScreenState extends State<_PersonMonthDetailScreen> {
     var remaining = amount;
     var allocated = 0.0;
 
-    if (direction == 'Diya') {
-      // Allocate money given to unpaid Khet/tractor bills, oldest first.
-      final debts = [...rows.where((row) =>
-        row['entryType'] == 'EXPENSE' || row['type'] == 'TRACTOR'
-      )]..sort((a, b) =>
-        (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
-      for (final debt in debts) {
-        if (remaining <= 0.009) break;
-        final table = debt['ledgerSource'] == 'HISAB' || debt['entryType'] == 'EXPENSE' ? 'hisabs' : 'khet';
-        final source = storage.records(table).where((row) => row['id']?.toString() == debt['id']?.toString()).toList();
-        if (source.isEmpty) continue;
-        final original = source.first;
-        final total = _amount(original['totalAmount'] ?? original['amount'] ?? original['price']);
-        final oldPaid = _amount(original['paidAmount']);
-        final due = (total - oldPaid).clamp(0, double.infinity).toDouble();
-        if (due <= 0.009) continue;
-        final take = remaining < due ? remaining : due;
-        final after = (due - take).clamp(0, double.infinity).toDouble();
-        final history = (original['payments'] as List? ?? const [])
-            .whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList()
-          ..add({
-            'amount': take,
-            'direction': 'Diya',
-            'date': date,
-            'note': note,
-            'balanceBefore': due,
-            'balanceAfter': after,
-          });
-        final updated = Map<String, dynamic>.from(original)
-          ..['paidAmount'] = oldPaid + take
-          ..['balance'] = after
-          ..['payments'] = history
-          ..['status'] = after <= 0.009 ? 'PAID' : 'PARTIAL'
-          ..['updatedAt'] = DateTime.now().toIso8601String();
-        await storage.updateRecord(table, original['id'].toString(), updated);
-        remaining -= take;
-        allocated += take;
-      }
-
-      // Vendor bills use their own payment records so their purchase ledger
-      // and Pending screen remain in sync.
-      final vendorIds = rows.where((row) => row['type'] == 'KHET_PURCHASE')
-          .map((row) => row['vendorId']).where((id) => id != null).toSet();
-      for (final vendorId in vendorIds) {
-        if (remaining <= 0.009) break;
-        final vendorBills = storage.records('khet').where((row) =>
-          row['type'] == 'KHET_PURCHASE' && row['vendorId'] == vendorId
-        ).toList();
-        final vendorPayments = storage.records('khet').where((row) =>
-          row['type'] == 'KHET_PURCHASE_PAYMENT' && row['vendorId'] == vendorId
-        ).fold<double>(0, (sum, row) => sum + _amount(row['amount']));
-        final vendorDue = (vendorBills.fold<double>(0, (sum, row) =>
-          sum + _amount(row['totalAmount']) - _amount(row['paidAmount'])) - vendorPayments)
-          .clamp(0, double.infinity).toDouble();
-        if (vendorDue <= 0.009) continue;
-        final take = remaining < vendorDue ? remaining : vendorDue;
-        await storage.addRecord('khet', {
-          'id': DateTime.now().microsecondsSinceEpoch.toString(),
-          'type': 'KHET_PURCHASE_PAYMENT',
-          'vendorId': vendorId,
-          'vendorName': vendorBills.first['vendorName'] ?? name,
+    // Allocate each payment/refund against the same person's oldest matching records.
+    final debts = [...rows.where((row) =>
+      row['entryType'] == 'EXPENSE' || row['type'] == 'TRACTOR'
+    )]..sort((a, b) {
+      final cmp = (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString());
+      return direction == 'Diya' ? cmp : -cmp;
+    });
+    for (final debt in debts) {
+      if (remaining <= 0.009) break;
+      final table = debt['ledgerSource'] == 'HISAB' || debt['entryType'] == 'EXPENSE' ? 'hisabs' : 'khet';
+      final source = storage.records(table).where((row) => row['id']?.toString() == debt['id']?.toString()).toList();
+      if (source.isEmpty) continue;
+      final original = source.first;
+      final total = _amount(original['totalAmount'] ?? original['amount'] ?? original['price']);
+      final oldPaid = _amount(original['paidAmount']);
+      final dueBefore = (total - oldPaid).clamp(0, double.infinity).toDouble();
+      final available = direction == 'Diya' ? dueBefore : oldPaid;
+      if (available <= 0.009) continue;
+      final take = remaining < available ? remaining : available;
+      final newPaid = direction == 'Diya' ? oldPaid + take : (oldPaid - take).clamp(0, double.infinity).toDouble();
+      final dueAfter = (total - newPaid).clamp(0, double.infinity).toDouble();
+      final history = (original['payments'] as List? ?? const [])
+          .whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList()
+        ..add({
           'amount': take,
-          'direction': 'Diya',
+          'direction': direction,
           'date': date,
           'note': note,
-          'allocationMethod': 'OLDEST_BILL_FIRST',
-          'balanceBefore': vendorDue,
-          'balanceAfter': (vendorDue - take).clamp(0, double.infinity),
+          'balanceBefore': dueBefore,
+          'balanceAfter': dueAfter,
         });
-        remaining -= take;
-        allocated += take;
-      }
-    } else {
-      // Money received for Kua rent is allocated to the oldest unpaid Kua bill.
-      final kuaRows = [...rows.where((row) => row['type'] == 'KUA')]
-        ..sort((a, b) => (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
-      for (final kua in kuaRows) {
-        if (remaining <= 0.009) break;
-        final source = storage.records('khet').where((row) =>
-          row['id']?.toString() == kua['id']?.toString() && row['type'] == 'KUA'
-        ).toList();
-        if (source.isEmpty) continue;
-        final original = source.first;
-        final total = _amount(original['cashAmount']);
-        final oldPaid = _amount(original['cashPaid']);
-        final due = (total - oldPaid).clamp(0, double.infinity).toDouble();
-        if (due <= 0.009) continue;
-        final take = remaining < due ? remaining : due;
-        final after = (due - take).clamp(0, double.infinity).toDouble();
-        final history = (original['payments'] as List? ?? const [])
-            .whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList()
-          ..add({
-            'amount': take,
-            'direction': 'Liya',
-            'date': date,
-            'note': note,
-            'balanceBefore': due,
-            'balanceAfter': after,
-          });
-        final updated = Map<String, dynamic>.from(original)
-          ..['cashPaid'] = oldPaid + take
-          ..['cashBalance'] = after
-          ..['cashStatus'] = after <= 0.009 ? 'PAID' : 'PARTIAL'
-          ..['payments'] = history
-          ..['updatedAt'] = DateTime.now().toIso8601String();
-        await storage.updateRecord('khet', original['id'].toString(), updated);
-        remaining -= take;
-        allocated += take;
-      }
+      final updated = Map<String, dynamic>.from(original)
+        ..['paidAmount'] = newPaid
+        ..['balance'] = dueAfter
+        ..['payments'] = history
+        ..['status'] = dueAfter <= 0.009 ? 'PAID' : (newPaid > 0 ? 'PARTIAL' : 'PENDING')
+        ..['updatedAt'] = DateTime.now().toIso8601String();
+      await storage.updateRecord(table, original['id'].toString(), updated);
+      remaining -= take;
+      allocated += take;
+    }
+
+    // Vendor purchases use separate signed payment records so a refund
+    // increases the vendor balance and a payment reduces it.
+    final vendorIds = rows.where((row) => row['type'] == 'KHET_PURCHASE')
+        .map((row) => row['vendorId']).where((id) => id != null).toSet();
+    for (final vendorId in vendorIds) {
+      if (remaining <= 0.009) break;
+      final vendorBills = storage.records('khet').where((row) =>
+        row['type'] == 'KHET_PURCHASE' && row['vendorId'] == vendorId
+      ).toList();
+      final vendorPayments = storage.records('khet').where((row) =>
+        row['type'] == 'KHET_PURCHASE_PAYMENT' && row['vendorId'] == vendorId
+      ).toList();
+      final vendorPaymentNet = vendorPayments.fold<double>(0, (sum, row) => sum + _amount(row['amount']));
+      final vendorDue = (vendorBills.fold<double>(0, (sum, row) =>
+        sum + _amount(row['totalAmount']) - _amount(row['paidAmount'])) - vendorPaymentNet);
+      final available = direction == 'Diya'
+          ? vendorDue.clamp(0, double.infinity).toDouble()
+          : vendorPaymentNet.clamp(0, double.infinity).toDouble();
+      if (available <= 0.009) continue;
+      final take = remaining < available ? remaining : available;
+      final signedAmount = direction == 'Diya' ? take : -take;
+      await storage.addRecord('khet', {
+        'id': DateTime.now().microsecondsSinceEpoch.toString(),
+        'type': 'KHET_PURCHASE_PAYMENT',
+        'vendorId': vendorId,
+        'vendorName': vendorBills.first['vendorName'] ?? name,
+        'amount': signedAmount,
+        'direction': direction,
+        'date': date,
+        'note': note,
+        'allocationMethod': 'OLDEST_BILL_FIRST',
+        'balanceBefore': vendorDue,
+        'balanceAfter': vendorDue - signedAmount,
+      });
+      remaining -= take;
+      allocated += take;
+    }
+
+    // Kua cash/rent is money the person owes us. A receipt reduces it;
+    // returning money increases it again.
+    final kuaRows = [...rows.where((row) => row['type'] == 'KUA')]
+      ..sort((a, b) {
+        final cmp = (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString());
+        return direction == 'Liya' ? cmp : -cmp;
+      });
+    for (final kua in kuaRows) {
+      if (remaining <= 0.009) break;
+      final source = storage.records('khet').where((row) =>
+        row['id']?.toString() == kua['id']?.toString() && row['type'] == 'KUA'
+      ).toList();
+      if (source.isEmpty) continue;
+      final original = source.first;
+      final total = _amount(original['cashAmount']);
+      final oldPaid = _amount(original['cashPaid']);
+      final dueBefore = (total - oldPaid).clamp(0, double.infinity).toDouble();
+      final available = direction == 'Liya' ? dueBefore : oldPaid;
+      if (available <= 0.009) continue;
+      final take = remaining < available ? remaining : available;
+      final newPaid = direction == 'Liya' ? oldPaid + take : (oldPaid - take).clamp(0, double.infinity).toDouble();
+      final dueAfter = (total - newPaid).clamp(0, double.infinity).toDouble();
+      final history = (original['payments'] as List? ?? const [])
+          .whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList()
+        ..add({
+          'amount': take,
+          'direction': direction,
+          'date': date,
+          'note': note,
+          'balanceBefore': dueBefore,
+          'balanceAfter': dueAfter,
+        });
+      final updated = Map<String, dynamic>.from(original)
+        ..['cashPaid'] = newPaid
+        ..['cashBalance'] = dueAfter
+        ..['cashStatus'] = dueAfter <= 0.009 ? 'PAID' : (newPaid > 0 ? 'PARTIAL' : 'PENDING')
+        ..['payments'] = history
+        ..['updatedAt'] = DateTime.now().toIso8601String();
+      await storage.updateRecord('khet', original['id'].toString(), updated);
+      remaining -= take;
+      allocated += take;
     }
 
     // Any amount not assigned to a specific bill is retained as a person
