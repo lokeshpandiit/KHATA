@@ -4,12 +4,14 @@ class HistoryEntry {
     required this.title,
     required this.subtitle,
     required this.date,
+    this.sortDate,
   });
 
   final String type;
   final String title;
   final String subtitle;
   final DateTime? date;
+  final DateTime? sortDate;
 }
 
 /// Builds a dated activity timeline from the same records used by KHATA ledgers.
@@ -71,6 +73,8 @@ class HistoryProjection {
             if (note.isNotEmpty) note,
           ].where((part) => part.isNotEmpty).join(' · '),
           date: _parseDate(payment['date']) ?? _recordDate(record),
+            sortDate: _parseDate(payment['enteredAt']) ?? _parseDate(payment['createdAt']) ?? _parseDate(payment['date']) ?? _parseDate(record['createdAt']) ?? _recordDate(record),
+          sortDate: _parseDate(payment['enteredAt']) ?? _parseDate(payment['createdAt']) ?? _parseDate(payment['date']) ?? _parseDate(record['createdAt']) ?? _recordDate(record),
         ));
       }
     }
@@ -97,6 +101,7 @@ class HistoryProjection {
             if (_value(record['note']).isNotEmpty) _value(record['note']),
           ].where((part) => part.isNotEmpty).join(' · '),
           date: _recordDate(record),
+          sortDate: _parseDate(record['createdAt']) ?? _recordDate(record),
         ));
         continue;
       }
@@ -154,6 +159,7 @@ class HistoryProjection {
               if (note.isNotEmpty) note,
             ].where((part) => part.isNotEmpty).join(' · '),
             date: _parseDate(exchange['date']) ?? _recordDate(record),
+            sortDate: _parseDate(exchange['enteredAt']) ?? _parseDate(exchange['createdAt']) ?? _parseDate(exchange['date']) ?? _parseDate(record['createdAt']) ?? _recordDate(record),
           ));
         }
       }
@@ -235,7 +241,7 @@ class HistoryProjection {
     }
 
     entries.sort((a, b) =>
-        (b.date ?? DateTime(0)).compareTo(a.date ?? DateTime(0)));
+        (b.sortDate ?? b.date ?? DateTime(0)).compareTo(a.sortDate ?? a.date ?? DateTime(0)));
     return entries;
   }
 }
