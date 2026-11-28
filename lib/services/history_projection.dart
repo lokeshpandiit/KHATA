@@ -187,6 +187,7 @@ class HistoryProjection {
             if (_value(record['note']).isNotEmpty) _value(record['note']),
           ].where((part) => part.isNotEmpty).join(' · '),
           date: _recordDate(record),
+          sortDate: _parseDate(record['createdAt']) ?? _recordDate(record),
         ));
         continue;
       }
