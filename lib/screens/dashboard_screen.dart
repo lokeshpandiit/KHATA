@@ -134,32 +134,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON')
         .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
     final tractorPending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0).map((row) => <String, dynamic>{...row, 'pendingKind': 'TRACTOR', 'pendingSource': 'khet'}).toList();
-    final vendorPurchases = khet.where((row) => row['type'] == 'KHET_PURCHASE' && thisMonth(row)).toList();
-    final monthVendorTotal = vendorPurchases.fold<double>(
-      0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['amount'] ?? row['price']),
-    );
-    // Payments are allocated to each vendor's oldest bill first. Count the
-    // amount actually settled on the selected month's bills.
-    var monthVendorPaid = 0.0;
-    final vendorIds = vendorPurchases.map((r)=>r['vendorId']).where((id)=>id!=null).toSet();
-    final vendorPending = <Map<String,dynamic>>[];
-    for(final vendorId in vendorIds){
-      final purchases=khet.where((r)=>r['type']=='KHET_PURCHASE'&&r['vendorId']==vendorId).toList()
-        ..sort((a,b)=>(a['invoiceDate']??a['date']??'').toString().compareTo((b['invoiceDate']??b['date']??'').toString()));
-      var payments=khet.where((r)=>r['type']=='KHET_PURCHASE_PAYMENT'&&r['vendorId']==vendorId)
-        .fold<double>(0,(sum,r)=>sum+_amount(r['amount']));
-      for(final purchase in purchases){
-        final initiallyPaid = _amount(purchase['paidAmount']);
-        final base=(_amount(purchase['totalAmount'])-initiallyPaid).clamp(0,double.infinity).toDouble();
-        final applied=payments<base?payments:base;
-        payments-=applied;
-        final balance=base-applied;
-        if (thisMonth(purchase)) {
-          monthVendorPaid += initiallyPaid + applied;
-          if(balance>0)vendorPending.add({...purchase,'dashboardBalance':balance,'pendingKind':'PURCHASE','pendingSource':'khet'});
-        }
-      }
-    }
     final khetExpensePending = <Map<String, dynamic>>[];
     final expensesByPerson = <String, List<Map<String, dynamic>>>{};
     for (final expense in hisabs.where((row) =>
@@ -222,7 +196,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ..sort((a,b)=>(DateTime.tryParse(a['dueDate'] as String? ?? '')??DateTime(9999))
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '')??DateTime(9999)));
     final pendingTotal=pending.fold<double>(0,(sum,row)=>sum+_balance(row));
-    final monthVendorPending = vendorPending.fold<double>(0,(sum,row)=>sum+_balance(row));
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
     return ListView(
@@ -2155,53 +2128,6 @@ class _KhetVendorLedgerDashboardScreenState
         icon: const Icon(Icons.payments),
         label: const Text('Full / Partial Payment'),
       ),
-    );
-  }
-}
-
-class _MonthVendorPurchasesScreen extends StatelessWidget {
-  const _MonthVendorPurchasesScreen({
-    required this.rows, required this.allRows, required this.monthTitle, required this.money,
-  });
-  final List<Map<String, dynamic>> rows, allRows;
-  final String monthTitle;
-  final NumberFormat money;
-  double n(dynamic v) => v is num ? v.toDouble() : double.tryParse((v ?? '').toString()) ?? 0;
-
-  @override
-  Widget build(BuildContext context) {
-    final byPerson = <String, List<Map<String, dynamic>>>{};
-    for (final r in rows) {
-      byPerson.putIfAbsent((r['vendorName'] ?? 'Shop').toString(), () => []).add(r);
-    }
-    final names = byPerson.keys.toList()..sort();
-    final total = rows.fold<double>(0, (s, r) => s + n(r['totalAmount']));
-    return Scaffold(
-      appBar: AppBar(title: Text('$monthTitle · Purchase Hisab')),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        Card(child: ListTile(
-          title: const Text('Month total purchases'), trailing: Text(money.format(total)),
-        )),
-        ...names.map((name) {
-          final list = byPerson[name]!;
-          final bought = list.fold<double>(0, (s, r) => s + n(r['totalAmount']));
-          final paid = list.fold<double>(0, (s, r) => s + n(r['paidAmount']));
-          final id = list.first['vendorId']?.toString() ?? '';
-          return Card(child: ListTile(
-            title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text('${list.length} bills · Bought ${money.format(bought)} · Paid ${money.format(paid)} · Pending ${money.format(bought - paid)}'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => Navigator.push(context, MaterialPageRoute<void>(
-              builder: (_) => KhetVendorLedgerDashboardScreen(vendorId: id, vendorName: name, rows: allRows),
-            )),
-          ));
-        }),
-        ...rows.map((r) => Card(child: ListTile(
-          title: Text('${r['title'] ?? 'Purchase'} · ${r['vendorName'] ?? ''}'),
-          subtitle: Text('${r['purchaseCategory'] ?? ''} · ${DateFormat('dd MMM yyyy').format(DateTime.tryParse((r['invoiceDate'] ?? r['date'] ?? '').toString()) ?? DateTime.now())}'),
-          trailing: Text(money.format(n(r['totalAmount']))),
-        ))),
-      ]),
     );
   }
 }
