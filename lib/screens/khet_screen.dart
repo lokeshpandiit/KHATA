@@ -374,7 +374,8 @@ class _KhetScreenState extends State<KhetScreen> {
         if (row['wetKyaris'] != null) 'Kyari: ${row['wetKyaris']} bheegi, ${row['remainingKyaris']} baaki',
         if (row['season'] != null || row['year'] != null) 'Season: ${row['season'] ?? ''} ${row['year'] ?? ''}',
         if (includeNote && note.isNotEmpty) 'Note: $note',
-      ].join('\n'),
+      ].join('
+'),
     );
   }
 
@@ -395,7 +396,8 @@ class _KhetScreenState extends State<KhetScreen> {
         if ((row['price'] as String? ?? '').isNotEmpty) 'Price: ₹${row['price']}',
         if ((row['note'] as String? ?? '').isNotEmpty) 'Note: ${row['note']}',
         if (date != null) 'Date: ${dateLabel(date)} ${timeLabel(date)}',
-      ].join('\n'),
+      ].join('
+'),
       files: files,
     );
   }
@@ -420,7 +422,8 @@ class _KhetScreenState extends State<KhetScreen> {
         'जमा: ₹${_amount(row['paidAmount']).toStringAsFixed(0)}',
         'बाकी: ₹${_balance(row).toStringAsFixed(0)}',
         if (due != null) 'भुगतान की अंतिम तारीख: ${DateFormat('dd MMM yyyy').format(due)}',
-      ].join('\n'),
+      ].join('
+'),
       files: files,
     );
   }
@@ -444,7 +447,8 @@ class _KhetScreenState extends State<KhetScreen> {
         'बदले में पानी — कुआँ: ${formatSignedMinutes(balances['Kua'] ?? 0)}',
         'बदले में पानी — नहर: ${formatSignedMinutes(balances['Nahar'] ?? 0)}',
         'Money-water NET: ${formatSignedMinutes(totalNet)}',
-      ].join('\n'),
+      ].join('
+'),
     );
   }
 
@@ -688,7 +692,9 @@ class _KhetScreenState extends State<KhetScreen> {
       return Card(margin: const EdgeInsets.only(bottom: 9), child: ListTile(
         leading: const CircleAvatar(child: Icon(Icons.water_drop_outlined)),
         title: Text((row['contact'] ?? 'Kua hisab').toString()),
-        subtitle: Text('${row['direction'] ?? ''}\n$mins\nBadle mein: ${formatMinutes((row['exchangeMinutes'] as num?)?.toInt() ?? 0)} · Cash ₹${cash.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)} · Baaki ₹${balance.toStringAsFixed(0)}'),
+        subtitle: Text('${row['direction'] ?? ''}
+$mins
+Badle mein: ${formatMinutes((row['exchangeMinutes'] as num?)?.toInt() ?? 0)} · Cash ₹${cash.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)} · Baaki ₹${balance.toStringAsFixed(0)}'),
         isThreeLine: true,
       ));
     }
@@ -2221,7 +2227,15 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
       _error('Tractor malik ka naam likhein ya contact se select karein');
       return;
     }
-    if (_plotScope == 'SINGLE' && _plotId == null) {\n      _error('Ek killa select karein, ya poora khet choose karein');\n      return;\n    }\n    if (_plotScope == 'MULTIPLE' && _plotIds.isEmpty) {\n      _error('Kam se kam ek killa select karein');\n      return;\n    }\n    if (_work.text.trim().isEmpty || total <= 0 || paid < 0 || paid > total) {
+    if (_plotScope == 'SINGLE' && _plotId == null) {
+      _error('Ek killa select karein, ya poora khet choose karein');
+      return;
+    }
+    if (_plotScope == 'MULTIPLE' && _plotIds.isEmpty) {
+      _error('Kam se kam ek killa select karein');
+      return;
+    }
+    if (_work.text.trim().isEmpty || total <= 0 || paid < 0 || paid > total) {
       _error('Enter work and valid total/paid amount');
       return;
     }
@@ -2235,7 +2249,9 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
         'customerName': _customerName,
         'ownerName': _customerName,
         'customerPhone': (_customerPhone ?? '').trim().isEmpty ? null : _customerPhone,
-        'plotScope': _plotScope,\n        'plotId': _plotScope == 'SINGLE' ? _plotId : null,\n        'plotIds': _plotScope == 'MULTIPLE' ? List<String>.from(_plotIds) : <String>[],
+        'plotScope': _plotScope,
+        'plotId': _plotScope == 'SINGLE' ? _plotId : null,
+        'plotIds': _plotScope == 'MULTIPLE' ? List<String>.from(_plotIds) : <String>[],
         'contact': _customerName,
         'work': _work.text.trim(),
         'title': _work.text.trim(),
@@ -2604,7 +2620,8 @@ class _KhetVendorLedgerScreenState extends State<KhetVendorLedgerScreen> {
             final date = DateTime.tryParse((r['date'] ?? '').toString()) ?? DateTime.now();
             final subtitle = '${dateLabel(date)}'
               '${isPurchase ? ' · Bill ₹${_n(r['totalAmount']).toStringAsFixed(0)} · Paid ₹${_n(r['paidAmount']).toStringAsFixed(0)}' : ''}'
-              '${(r['note'] ?? '').toString().isEmpty ? '' : '\n${r['note']}'}';
+              '${(r['note'] ?? '').toString().isEmpty ? '' : '
+${r['note']}'}';
             return ListTile(
               leading: Icon(isPurchase ? Icons.shopping_bag : Icons.payments),
               title: Text(isPurchase ? (r['title'] ?? 'Purchase').toString() : 'Payment ₹${_n(r['amount']).toStringAsFixed(0)}'),
