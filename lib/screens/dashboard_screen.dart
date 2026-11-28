@@ -5,6 +5,7 @@ import '../services/storage_backup_service.dart';
 import '../services/farm_reminder_service.dart';
 import '../widgets/khet_map_widget.dart';
 import '../widgets/plot_selector.dart';
+import '../widgets/khata_widgets.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -768,7 +769,7 @@ class _PersonMonthDetailScreenState extends State<_PersonMonthDetailScreen> {
     }
     final note = (row['note'] ?? '').toString().trim();
     if (note.isNotEmpty) parts.add(note);
-    return parts.join(' · ');
+    return cleanDisplayText(parts.join(' · '));
   }
 
   @override
@@ -1796,7 +1797,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
             final source = (row['borrowedSource'] ?? row['source'] ?? 'Pani').toString();
             return Card(child: ListTile(
               title: Text('${row['type'] == 'KUA' ? (row['contact'] ?? 'Person') : (row['borrowedContact'] ?? row['contact'] ?? 'Person')} · ${row['type'] == 'KUA' ? 'Kua: ${row['wellSelection'] ?? 'Solar'}' : source}'),
-              subtitle: Text('Udhaar: $mins min · Mila: $exchanged min · Baki: $remaining min\n${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}\n${(row['waterExchangeHistory'] as List? ?? const []).map((e) { final dt=DateTime.tryParse((e['date']??'').toString()); return '${dt==null?'':DateFormat('dd MMM yyyy').format(dt)}: ${e['minutes']} min pani liya · pehle ${e['balanceBefore'] ?? ''} min · baki ${e['balanceAfter'] ?? ''} min'; }).join('\n')}\n${(row['waterCashPaymentHistory'] as List? ?? const []).map((e) { final dt=DateTime.tryParse((e['date']??'').toString()); return '${dt==null?'':DateFormat('dd MMM yyyy').format(dt)}: Cash ${e['direction'] ?? ''} ₹${_amount(e['amount']).toStringAsFixed(0)} (full settlement)'; }).join('\n')}\n${row['note'] ?? ''}'),
+              subtitle: Text('Udhaar: $mins min · Mila: $exchanged min · Baki: $remaining min\n${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}\n${(row['waterExchangeHistory'] as List? ?? const []).map((e) { final dt=DateTime.tryParse((e['date']??'').toString()); return '${dt==null?'':DateFormat('dd MMM yyyy').format(dt)}: ${e['minutes']} min pani liya · pehle ${e['balanceBefore'] ?? ''} min · baki ${e['balanceAfter'] ?? ''} min'; }).join('\n')}\n${(row['waterCashPaymentHistory'] as List? ?? const []).map((e) { final dt=DateTime.tryParse((e['date']??'').toString()); return '${dt==null?'':DateFormat('dd MMM yyyy').format(dt)}: Cash ${e['direction'] ?? ''} ₹${_amount(e['amount']).toStringAsFixed(0)} (full settlement)'; }).join('\n')}\n${cleanDisplayText(row['note'])}'),
               trailing: const Icon(Icons.edit_note),
               onTap: () => _updateWaterStatus(row),
             ));
