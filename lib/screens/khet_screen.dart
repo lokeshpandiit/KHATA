@@ -779,9 +779,13 @@ ${timeLabel(date)}'}',
                 style: TextStyle(fontWeight: FontWeight.w800, color: balance <= 0 ? Colors.green : Colors.red)),
             ]),
             const SizedBox(height: 6),
-            Text('Field: ${row['farmName'] ?? '-'}'),
-            if (row['plotId'] != null && _plotLabel(row['plotId']).isNotEmpty)
+            if (row['plotScope'] == 'KHET' || (row['plotScope'] == null && row['plotId'] == null && (row['plotIds'] as List? ?? const []).isEmpty))
+              const Text('Field: पूरा खेत'),
+            if (row['plotScope'] == 'SINGLE' && row['plotId'] != null)
               Text('Killa: ${_plotLabel(row['plotId'])}'),
+            if (row['plotScope'] == 'MULTIPLE') ...[
+              Text('Selected kille: ${(row['plotLabelsSnapshot'] as List? ?? const []).join(', ')}'),
+            ],
             Text('Work: ${row['work'] ?? '-'}'),
             const SizedBox(height: 8),
             Wrap(spacing: 12, runSpacing: 6, children: [
@@ -2275,6 +2279,9 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
         'plotScope': _plotScope,
         'plotId': _plotScope == 'SINGLE' ? _plotId : null,
         'plotIds': _plotScope == 'MULTIPLE' ? List<String>.from(_plotIds) : <String>[],
+        'plotLabelsSnapshot': _plotScope == 'SINGLE' && _plotId != null
+            ? <String>[plotLabelForId(_storage, _plotId)]
+            : (_plotScope == 'MULTIPLE' ? _selectedPlotLabels() : <String>[]),
         'contact': _customerName,
         'work': _work.text.trim(),
         'title': _work.text.trim(),
