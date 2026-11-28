@@ -1262,6 +1262,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
               if (!cashMode)
                 const DropdownMenuItem(value: 'WATER_EXCHANGE', child: Text('Badle mein pani liya')),
               const DropdownMenuItem(value: 'CASH_PAYMENT', child: Text('Paise dekar settle karein')),
+              const DropdownMenuItem(value: 'WORK_SETTLEMENT', child: Text('Khet mein kaam karwa ke settle karein')),
             ],
             onChanged: (v) => setDialog(() { status = v ?? 'PENDING'; }),
           ),
@@ -1288,6 +1289,13 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
               },
             ),
             Text('Iske baad baki: ${(remaining - (int.tryParse(minutesController.text) ?? 0)).clamp(0, 999999)} min'),
+          ],
+          if (status == 'WORK_SETTLEMENT') ...[
+            TextField(
+              controller: noteController,
+              decoration: const InputDecoration(labelText: 'Khet mein kya kaam karwaya? (jaise: buai, nirai, katai)'),
+            ),
+            const Text('Is option se pani ka baki hisab kaam ke badle settle mark hoga.'),
           ],
           if (status == 'CASH_PAYMENT') ...[
             TextField(
@@ -1402,7 +1410,18 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
       });
     }
 
-    final cashSettlementMode = cashMode || status == 'CASH_PAYMENT';
+    final workSettlementMode = status == 'WORK_SETTLEMENT';
+    if (workSettlementMode) {
+      cashHistory.add({
+        'amount': 0,
+        'direction': 'WorkSettlement',
+        'date': activityDate.toIso8601String(),
+        'note': noteController.text.trim().isEmpty ? 'Khet mein kaam karwa ke settle' : noteController.text.trim(),
+        'balanceBefore': oldCashBalance,
+        'balanceAfter': 0,
+      });
+    }
+    final cashSettlementMode = cashMode || status == 'CASH_PAYMENT' || workSettlementMode;
     updated
       ..['waterExchangeHistory'] = history
       ..['waterExchangedMinutes'] = totalExchanged
