@@ -13,7 +13,6 @@ import '../widgets/khata_widgets.dart';
 import '../widgets/plot_selector.dart';
 import '../widgets/multi_plot_selector.dart';
 import '../widgets/farm_fields.dart';
-import '../services/farm_reminder_service.dart';
 import '../services/future_date_reminder_prompt.dart';
 import '../widgets/voice_dictation_field.dart';
 
@@ -1374,8 +1373,6 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   DateTime _activityDate = DateTime.now();
   DateTime? _harvestDate;
   bool _harvested = false;
-  bool _reminderEnabled = false;
-  DateTime? _reminderAt;
   bool _saving = false;
 
   @override
@@ -1481,24 +1478,6 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     }
   }
 
-  Future<void> _pickReminder() async {
-    final now = DateTime.now();
-    final initial = _reminderAt ?? now.add(const Duration(days: 7));
-    final date = await showDatePicker(
-      context: context,
-      initialDate: initial.isBefore(now) ? now : initial,
-      firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: DateTime(now.year + 8),
-    );
-    if (date == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(_reminderAt ?? now.add(const Duration(days: 7))),
-    );
-    if (time == null || !mounted) return;
-    setState(() => _reminderAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
-  }
-
   Future<void> _pickPhotos(bool bill, ImageSource source) async {
     try {
       final images = source == ImageSource.gallery
@@ -1574,25 +1553,15 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       _error('Partial killa ke liye kyari number/name likhein');
       return;
     }
-    if (widget.type == 'DAWAI' && !_khalaOnly && _reminderEnabled && _reminderAt == null) {
-      _error('Reminder ke liye date aur time set karein');
-      return;
-    }
-    if (widget.type == 'DAWAI' && !_khalaOnly && _reminderEnabled && !_reminderAt!.isAfter(DateTime.now())) {
-      _error('Reminder future date/time par set karein');
-      return;
-    }
 
     setState(() => _saving = true);
     final now = DateTime.now();
     final activityDate = DateTime(
       _activityDate.year, _activityDate.month, _activityDate.day, now.hour, now.minute);
     final batchId = now.microsecondsSinceEpoch.toString();
-    final reminderId = int.parse(batchId) % 2000000000;
     final plotEntries = _needsFarmDetails ? _selectedPlots.entries.toList() : <MapEntry<String, int>>[];
     final count = _needsFarmDetails ? plotEntries.length : 1;
     var allocatedPrice = 0.0;
-    String? reminderError;
 
     try {
       for (var index = 0; index < count; index++) {
@@ -1668,34 +1637,12 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
               ? 'Fasal record nahi hai'
               : (currentCrop['cropName'] ?? currentCrop['title'] ?? 'Fasal').toString();
           record['applicationDate'] = activityDate.toIso8601String();
-          record['reminderDate'] = _reminderEnabled ? _reminderAt?.toIso8601String() : null;
-          record['reminderId'] = _reminderEnabled ? reminderId : null;
         }
         await _storage.addRecord('khet', record);
       }
 
-      if (widget.type == 'DAWAI' && !_khalaOnly && _reminderEnabled && _reminderAt != null) {
-        try {
-          final killaNames = plotEntries.map((entry) {
-            final plot = _storage.records('plots').firstWhere((p) => p['id'] == entry.key);
-            return plotLabel(plot);
-          }).join(', ');
-          await FarmReminderService.schedule(
-            id: reminderId,
-            scheduledAt: _reminderAt!,
-            title: 'KHATA: $title',
-            body: 'Dawai dalni hai · $_purpose · Kille: $killaNames',
-          );
-        } catch (error) {
-          reminderError = error.toString();
-        }
-      }
       if (mounted) {
-        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
-        if (reminderError != null) {
-          messenger.showSnackBar(SnackBar(content: Text('Entry save ho gayi, reminder nahi laga: $reminderError')));
-        }
       }
     } catch (error) {
       _error('Could not save Khet entry: ' + error.toString());
