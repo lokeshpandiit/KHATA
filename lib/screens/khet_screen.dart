@@ -1958,30 +1958,32 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
     setState(() => _saving = true);
     try {
       final now = DateTime.now();
+      final exchangeOwedMinutes = (int.tryParse(_exchange.text.trim()) ?? 0) > 0
+          ? int.parse(_exchange.text.trim())
+          : mins.values.fold<int>(0, (sum, value) => sum + value);
+      final contactName = _manualPerson.text.trim().isNotEmpty
+          ? _manualPerson.text.trim()
+          : (_person.trim().isEmpty ? 'Samne wala' : _person.trim());
       await _storage.addRecord('khet', {
         'id': now.microsecondsSinceEpoch.toString(),
         'type': 'KUA',
-        'contact': _manualPerson.text.trim().isNotEmpty ? _manualPerson.text.trim() : (_person.trim().isEmpty ? 'Samne wala' : _person.trim()),
+        'contact': contactName,
         'direction': _direction,
         'wellSelection': _well,
         'wellMinutes': mins,
-        'exchangeMinutes': (int.tryParse(_exchange.text) ?? 0) > 0
-            ? int.parse(_exchange.text)
-            : mins.values.fold<int>(0, (sum, value) => sum + value),
-        'waterOwedMinutes': (int.tryParse(_exchange.text) ?? 0) > 0
-            ? int.parse(_exchange.text)
-            : mins.values.fold<int>(0, (sum, value) => sum + value),
+        'exchangeMinutes': exchangeOwedMinutes,
+        'waterOwedMinutes': exchangeOwedMinutes,
         'waterExchangedMinutes': 0,
-        'waterRemainingMinutes': (int.tryParse(_exchange.text) ?? 0) > 0
-            ? int.parse(_exchange.text)
-            : mins.values.fold<int>(0, (sum, value) => sum + value),
+        'waterRemainingMinutes': exchangeOwedMinutes,
         'waterExchangeHistory': <Map<String, dynamic>>[],
-        'waterPaymentPending': ((int.tryParse(_exchange.text) ?? 0) > 0
-            ? int.parse(_exchange.text)
-            : mins.values.fold<int>(0, (sum, value) => sum + value) > 0),
+        'waterPaymentPending': exchangeOwedMinutes > 0,
         'cashAmount': cash,
         'cashPaid': paid,
         'cashBalance': cash - paid,
+        'cashStatus': paid >= cash ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING'),
+        'payments': paid > 0
+            ? <Map<String, dynamic>>[{'amount': paid, 'direction': 'Diya', 'date': now.toIso8601String(), 'balanceBefore': cash, 'balanceAfter': cash - paid}]
+            : <Map<String, dynamic>>[],
         'note': _note.text.trim(),
         'date': now.toIso8601String(),
       });
