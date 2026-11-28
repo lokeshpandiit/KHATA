@@ -2584,7 +2584,7 @@ class _KhetVendorLedgerScreenState extends State<KhetVendorLedgerScreen> {
       'id': DateTime.now().microsecondsSinceEpoch.toString(), 'type': 'KHET_PURCHASE_PAYMENT',
       'vendorId': widget.vendorId, 'vendorName': widget.vendorName, 'amount': result['amount'],
       'date': (result['date'] as DateTime).toIso8601String(), 'note': result['note'],
-      'allocationMethod': 'OLDEST_BILL_FIRST'
+      'allocationMethod': 'OLDEST_BILL_FIRST', 'balanceBefore': balance, 'balanceAfter': (balance - (result['amount'] as num).toDouble()).clamp(0, double.infinity)
     });
     if (mounted) setState(() {});
   }
