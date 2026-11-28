@@ -2013,7 +2013,7 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
         'cashBalance': cash - paid,
         'cashStatus': paid >= cash ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING'),
         'payments': paid > 0
-            ? <Map<String, dynamic>>[{'amount': paid, 'direction': 'Diya', 'date': now.toIso8601String(), 'balanceBefore': cash, 'balanceAfter': cash - paid}]
+            ? <Map<String, dynamic>>[{'amount': paid, 'direction': 'Liya', 'date': now.toIso8601String(), 'balanceBefore': cash, 'balanceAfter': cash - paid}]
             : <Map<String, dynamic>>[],
         'note': _note.text.trim(),
         'date': now.toIso8601String(),
