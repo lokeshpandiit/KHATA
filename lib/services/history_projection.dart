@@ -1,3 +1,5 @@
+import '../widgets/khata_widgets.dart';
+
 class HistoryEntry {
   const HistoryEntry({
     required this.type,
@@ -29,7 +31,7 @@ class HistoryProjection {
       _parseDate(row['createdAt']) ??
       _parseDate(row['updatedAt']);
 
-  static String _value(dynamic value) => (value ?? '').toString().trim();
+  static String _value(dynamic value) => cleanDisplayText(value).trim();
 
   static String _minutes(dynamic value) {
     final minutes = value is num ? value.toInt() : int.tryParse('$value') ?? 0;
