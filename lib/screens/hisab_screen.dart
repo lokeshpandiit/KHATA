@@ -28,6 +28,10 @@ class _HisabScreenState extends State<HisabScreen> {
 
   List<Map<String, dynamic>> get _rows => _storage.records('hisabs');
 
+  double _amount(dynamic value) => value is num
+      ? value.toDouble()
+      : double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
+
 
   Future<void> _addHisab() async {
     await Navigator.of(context).push(
