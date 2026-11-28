@@ -2604,7 +2604,8 @@ class _KhetVendorLedgerScreenState extends State<KhetVendorLedgerScreen> {
     DateTime date = DateTime.now();
     String direction = 'Diya';
     final before = balance;
-    final paidLaterBefore = payments.fold<double>(0, (sum, row) => sum + _n(row['amount']));
+    final refundablePaid = purchases.fold<double>(0, (sum, row) => sum + _n(row['paidAmount'])) +
+        payments.fold<double>(0, (sum, row) => sum + _n(row['amount']));
     final result = await showDialog<Map<String, dynamic>>(context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setD) => AlertDialog(
         title: Text('Payment · ${widget.vendorName}'),
@@ -2633,7 +2634,7 @@ class _KhetVendorLedgerScreenState extends State<KhetVendorLedgerScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(onPressed: () {
             final n = double.tryParse(amount.text.trim()) ?? 0;
-            final limit = direction == 'Diya' ? before.clamp(0, double.infinity).toDouble() : paidLaterBefore.clamp(0, double.infinity).toDouble();
+            final limit = direction == 'Diya' ? before.clamp(0, double.infinity).toDouble() : refundablePaid.clamp(0, double.infinity).toDouble();
             if (n <= 0 || n > limit + 0.009) {
               ScaffoldMessenger.of(ctx).showSnackBar(
                 SnackBar(content: Text('1 se ₹${limit.toStringAsFixed(0)} ke beech amount bharein')));
