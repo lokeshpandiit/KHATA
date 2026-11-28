@@ -41,40 +41,58 @@ class _VoiceNotesScreenState extends State<VoiceNotesScreen> {
     if (t.isEmpty) return '';
     final lower = t.toLowerCase();
 
-    // Water transactions: create a meaningful title instead of copying the transcript.
+    // Water transactions: identify source and person.
     final source = lower.contains('नहर') || lower.contains('nahar') || lower.contains('canal')
         ? 'नहर'
-        : (lower.contains('कुआ') || lower.contains('कुए') || lower.contains('ku') || lower.contains('well')
+        : (lower.contains('कुआ') || lower.contains('कुए') || lower.contains('kuan') || lower.contains('kuwe') || lower.contains('well')
             ? 'कुएँ'
             : (lower.contains('ट्यूबवेल') || lower.contains('tubewell') || lower.contains('tube well') ? 'ट्यूबवेल' : null));
     if (source != null && (lower.contains('पानी') || lower.contains('water') || lower.contains('minut') || lower.contains('मिनट'))) {
       final action = (lower.contains('लिया') || lower.contains('liye') || lower.contains('liya') || lower.contains('ले') || lower.contains('used'))
           ? 'पानी लिया'
           : ((lower.contains('दिया') || lower.contains('diya') || lower.contains('दे')) ? 'पानी दिया' : 'पानी का लेन-देन');
-      String? person;
-      final patterns = [
-        RegExp(r'(?:से|se)\\s+([\\p{L}]+(?:\\s+[\\p{L}]+){0,2})', unicode: true),
-        RegExp(r'([\\p{L}]+(?:\\s+[\\p{L}]+){0,2})\\s+(?:से|se)', unicode: true),
-      ];
-      for (final pattern in patterns) {
-        final match = pattern.firstMatch(t);
-        if (match != null) {
-          person = match.group(1)?.trim();
-          break;
-        }
-      }
-      // Avoid capturing transaction words as a person's name.
-      if (person != null && RegExp(r'(पानी|नहर|कुए|मिनट|लिए|लिया|दिया|आज|कल|काम|से)', unicode: true).hasMatch(person)) {
-        person = null;
-      }
-      return person == null || person.isEmpty ? '$source का $action' : '$source का $action - $person से';
+      final person = _extractPerson(t, fromMarkers: ['से', 'se'], toMarkers: ['को', 'ko']);
+      return person == null ? '$source का $action' : '$source का $action - $person से';
     }
-    if (lower.contains('पैसे') || lower.contains('payment') || lower.contains('पेमेंट') || lower.contains('जमा') || lower.contains('उधार')) {
+
+    // Money transactions: distinguish money received from money paid.
+    final isMoney = lower.contains('पैसे') || lower.contains('रुपये') || lower.contains('रुपए') ||
+        lower.contains('रुपया') || lower.contains('paise') || lower.contains('paisa') ||
+        lower.contains('rupees') || lower.contains('payment') || lower.contains('पेमेंट') ||
+        lower.contains('उधार') || lower.contains('जमा');
+    if (isMoney) {
+      final paid = lower.contains('दिए') || lower.contains('दी') || lower.contains('diye') ||
+          lower.contains('diya') || lower.contains('pay kiye') || lower.contains('paid') ||
+          lower.contains('दे दिए') || lower.contains('देना');
+      final received = lower.contains('लिए') || lower.contains('liya') || lower.contains('liye') ||
+          lower.contains('मिले') || lower.contains('mila') || lower.contains('received') ||
+          lower.contains('वापस मिला');
+      final person = _extractPerson(t, fromMarkers: ['से', 'se'], toMarkers: ['को', 'ko']);
+      if (paid && person != null) return '$person को पैसे दिए';
+      if (received && person != null) return '$person से पैसे लिए';
+      if (paid) return 'पैसे दिए';
+      if (received) return 'पैसे लिए';
       return 'पैसों का लेन-देन';
     }
     return 'Voice Note';
   }
 
+  String? _extractPerson(String text, {required List<String> fromMarkers, required List<String> toMarkers}) {
+    // Prefer explicit person phrases: "X से" / "X को", then "से X" / "को X".
+    final patterns = [
+      RegExp(r'([\\p{L}]+(?:\\s+[\\p{L}]+){0,2})\\s+(?:से|को|se|ko)', unicode: true, caseSensitive: false),
+      RegExp(r'(?:से|को|se|ko)\\s+([\\p{L}]+(?:\\s+[\\p{L}]+){0,2})', unicode: true, caseSensitive: false),
+    ];
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(text);
+      if (match == null) continue;
+      final candidate = match.group(1)?.trim();
+      if (candidate == null || candidate.isEmpty) continue;
+      if (RegExp(r'(पानी|नहर|कुए|मिनट|लिए|लिया|दिया|आज|कल|काम|पैसे|रुपये|रुपए|रुपया|उधार|लेन|देन|payment|water|money|from|to)', unicode: true, caseSensitive: false).hasMatch(candidate)) continue;
+      return candidate;
+    }
+    return null;
+  }
   void suggestTitle() {
     if (title.text.trim().isNotEmpty) return;
     final suggested = _makeSmartTitle(transcript.text);
