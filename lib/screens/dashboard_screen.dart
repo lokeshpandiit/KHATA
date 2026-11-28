@@ -894,7 +894,13 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     if (status == 'WATER_EXCHANGE') history.add({'minutes': int.parse(minutesController.text.trim()), 'date': exchangeDate.toIso8601String(), 'note': noteController.text.trim()});
     final totalExchanged = history.fold<int>(0, (sum, e) => sum + _amount(e['minutes']).toInt());
     final left = (owed - totalExchanged).clamp(0, 999999);
-    updated..['waterExchangeHistory'] = history..['waterExchangedMinutes'] = totalExchanged..['waterRemainingMinutes'] = left..['waterPaymentStatus'] = status == 'WATER_EXCHANGE' && left > 0 ? 'PENDING' : status..['waterPaymentPending'] = status == 'PAID' ? false : left > 0..['waterPaymentNote'] = noteController.text.trim();
+    updated
+      ..['waterExchangeHistory'] = history
+      ..['waterExchangedMinutes'] = totalExchanged
+      ..['waterRemainingMinutes'] = left
+      ..['waterPaymentStatus'] = (status == 'WATER_EXCHANGE' && left > 0) ? 'PENDING' : status
+      ..['waterPaymentPending'] = (status == 'PAID') ? false : left > 0
+      ..['waterPaymentNote'] = noteController.text.trim();
     await widget.storage.updateRecord('khet', row['id'].toString(), updated);
     noteController.dispose(); minutesController.dispose(); if (mounted) setState(() {});
   }
