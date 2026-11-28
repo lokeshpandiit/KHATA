@@ -374,8 +374,7 @@ class _KhetScreenState extends State<KhetScreen> {
         if (row['wetKyaris'] != null) 'Kyari: ${row['wetKyaris']} bheegi, ${row['remainingKyaris']} baaki',
         if (row['season'] != null || row['year'] != null) 'Season: ${row['season'] ?? ''} ${row['year'] ?? ''}',
         if (includeNote && note.isNotEmpty) 'Note: $note',
-      ].join('
-'),
+      ].join('\\n'),
     );
   }
 
@@ -396,8 +395,7 @@ class _KhetScreenState extends State<KhetScreen> {
         if ((row['price'] as String? ?? '').isNotEmpty) 'Price: ₹${row['price']}',
         if ((row['note'] as String? ?? '').isNotEmpty) 'Note: ${row['note']}',
         if (date != null) 'Date: ${dateLabel(date)} ${timeLabel(date)}',
-      ].join('
-'),
+      ].join('\\n'),
       files: files,
     );
   }
@@ -422,8 +420,7 @@ class _KhetScreenState extends State<KhetScreen> {
         'जमा: ₹${_amount(row['paidAmount']).toStringAsFixed(0)}',
         'बाकी: ₹${_balance(row).toStringAsFixed(0)}',
         if (due != null) 'भुगतान की अंतिम तारीख: ${DateFormat('dd MMM yyyy').format(due)}',
-      ].join('
-'),
+      ].join('\\n'),
       files: files,
     );
   }
@@ -447,8 +444,7 @@ class _KhetScreenState extends State<KhetScreen> {
         'बदले में पानी — कुआँ: ${formatSignedMinutes(balances['Kua'] ?? 0)}',
         'बदले में पानी — नहर: ${formatSignedMinutes(balances['Nahar'] ?? 0)}',
         'Money-water NET: ${formatSignedMinutes(totalNet)}',
-      ].join('
-'),
+      ].join('\\n'),
     );
   }
 
@@ -700,9 +696,7 @@ class _KhetScreenState extends State<KhetScreen> {
       return Card(margin: const EdgeInsets.only(bottom: 9), child: ListTile(
         leading: const CircleAvatar(child: Icon(Icons.water_drop_outlined)),
         title: Text((row['contact'] ?? 'Kua hisab').toString()),
-        subtitle: Text('${row['direction'] ?? ''}
-$mins
-Pani lena baki: ${formatMinutes(waterLeft)} · Cash ₹${cash.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)} · Baaki ₹${balance.toStringAsFixed(0)}${waterLog.isEmpty ? '' : '\nWater history: $waterLog'}'),
+        subtitle: Text('${row['direction'] ?? ''}\\n$mins\\nPani lena baki: ${formatMinutes(waterLeft)} · Cash ₹${cash.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)} · Baaki ₹${balance.toStringAsFixed(0)}${waterLog.isEmpty ? '' : '\\nWater history: $waterLog'}'),
         isThreeLine: true,
       ));
     }
@@ -713,6 +707,20 @@ Pani lena baki: ${formatMinutes(waterLeft)} · Cash ₹${cash.toStringAsFixed(0)
       final wellType = (row['wellType'] ?? '').toString();
       final directionLabel = row['direction'] == 'Diya' ? 'पानी दिया' : 'पानी लिया';
       final dateText = date == null ? '' : dateLabel(date);
+      final details = <String>[];
+      if (personLedger) {
+        details.add('${row['direction'] == 'Diya' ? '+' : '−'}${formatMinutes(minutes)}');
+        if (dateText.isNotEmpty) details.add(dateText);
+      } else {
+        details.add(formatMinutes(minutes));
+        if (row['wetKyaris'] != null) {
+          details.add('Bheegi: ${row['wetKyaris']} / ${row['totalKyarisSnapshot'] ?? '-'} · Baaki: ${row['remainingKyaris'] ?? '-'}');
+        }
+        if (row['season'] != null) details.add('${row['season']} ${row['year'] ?? ''}');
+        if (date != null) details.add(timeLabel(date));
+      }
+      final noteText = (row['note'] as String? ?? '').trim();
+      if (noteText.isNotEmpty) details.add(noteText);
       return Card(
         margin: const EdgeInsets.only(bottom: 9),
         child: ListTile(
@@ -725,23 +733,7 @@ Pani lena baki: ${formatMinutes(waterLeft)} · Cash ₹${cash.toStringAsFixed(0)
             if (personLedger) directionLabel else (row['direction'] ?? '').toString(),
             if (row['plotId'] != null) _plotLabel(row['plotId']),
           ].where((part) => part.isNotEmpty).join(' · ')),
-          subtitle: Text(
-            personLedger
-                ? '${row['direction'] == 'Diya' ? '+' : '−'}${formatMinutes(minutes)}'
-                    '${dateText.isEmpty ? '' : '
-$dateText'}'
-                    '${(row['note'] as String? ?? '').isNotEmpty ? '
-${row['note']}' : ''}'
-                : '${formatMinutes(minutes)}'
-                    '${row['wetKyaris'] == null ? '' : '
-Bheegi: ${row['wetKyaris']} / ${row['totalKyarisSnapshot'] ?? '-'} · Baaki: ${row['remainingKyaris'] ?? '-'}'}'
-                    '${row['season'] == null ? '' : '
-${row['season']} ${row['year'] ?? ''}'}'
-                    '${(row['note'] as String? ?? '').isNotEmpty ? '
-${row['note']}' : ''}'
-                    '${date == null ? '' : '
-${timeLabel(date)}'}',
-          ),
+          subtitle: Text(details.join('\\n')),
           isThreeLine: true,
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
@@ -1758,7 +1750,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
               }),
             )
           else if (!(widget.type == 'DAWAI' && _khalaOnly))
-            _tractorPlotScopeFields(),
+            KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
 
           if (farmPlot) ...[
             const SizedBox(height: 8),
@@ -2491,7 +2483,7 @@ class _KhetPurchaseScreenState extends State<KhetPurchaseScreen> {
         'billPhotos': _billPhoto == null ? [] : [_billPhoto],
         'itemPhoto': _itemPhoto, 'itemPhotos': _itemPhoto == null ? [] : [_itemPhoto],
         'note': _note.text.trim(),
-        'payments': paid > 0 ? [{'amount': paid, 'direction': 'Diya', 'date': now.toIso8601String(), 'balanceBefore': total, 'balanceAfter': balance}] : [],
+        'payments': paid > 0 ? [{'amount': paid, 'direction': 'Diya', 'date': now.toIso8601String(), 'balanceBefore': total, 'balanceAfter': total - paid}] : [],
         'createdAt': now.toIso8601String()
       });
       if (mounted) Navigator.pop(context);
@@ -2650,8 +2642,7 @@ class _KhetVendorLedgerScreenState extends State<KhetVendorLedgerScreen> {
             final date = DateTime.tryParse((r['date'] ?? '').toString()) ?? DateTime.now();
             final subtitle = '${dateLabel(date)}'
               '${isPurchase ? ' · Bill ₹${_n(r['totalAmount']).toStringAsFixed(0)} · Paid ₹${_n(r['paidAmount']).toStringAsFixed(0)}' : ''}'
-              '${(r['note'] ?? '').toString().isEmpty ? '' : '
-${r['note']}'}';
+              '${(r['note'] ?? '').toString().isEmpty ? '' : '\\n${r['note']}'}';
             return ListTile(
               leading: Icon(isPurchase ? Icons.shopping_bag : Icons.payments),
               title: Text(isPurchase ? (r['title'] ?? 'Purchase').toString() : 'Payment ₹${_n(r['amount']).toStringAsFixed(0)}'),
