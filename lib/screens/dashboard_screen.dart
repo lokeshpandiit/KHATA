@@ -369,8 +369,10 @@ class _PersonMonthDetailScreen extends StatelessWidget {
 }
 
 class _KhetExpensesScreen extends StatefulWidget {
- const _KhetExpensesScreen({required this.rows,required this.money});
- final List<Map<String,dynamic>> rows; final NumberFormat money;
+ const _KhetExpensesScreen({required this.rows, required this.money, this.initialMonth});
+ final List<Map<String,dynamic>> rows;
+ final NumberFormat money;
+ final String? initialMonth;
  @override State<_KhetExpensesScreen> createState()=>_KhetExpensesScreenState();
 }
 class _KhetExpensesScreenState extends State<_KhetExpensesScreen>{
