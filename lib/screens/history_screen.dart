@@ -54,10 +54,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
       all.add(_Item('HISAB', title,
         [_str(r['category']), if (_str(r['amount']).isNotEmpty) '₹${r['amount']}', _str(r['note'])].where((s)=>s.isNotEmpty).join(' · '), _date(r)));
       addPaymentRows(r, 'HISAB', title);
-      // Standalone/person payments are themselves history transactions.
-      if (r['entryType'] == 'PAYMENT' || r['paymentKind'] == 'PERSON_PAYMENT') {
-        all.add(_Item('HISAB', title, [_str(r['direction']), if (_str(r['amount']).isNotEmpty) '₹${r['amount']}', _str(r['note'])].where((s)=>s.isNotEmpty).join(' · '), _date(r)));
-      }
     }
     for (final r in _storage.records('khet')) {
       final water = r.containsKey('source') || r.containsKey('minutes') || r.containsKey('direction');
