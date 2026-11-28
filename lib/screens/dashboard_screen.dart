@@ -104,7 +104,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final monthPani = khet.where(thisMonth)
         .where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON')
         .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
-    final tractorPending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0 && thisMonth(row)).toList();
+    final tractorPending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0).toList();
     final vendorPurchases = khet.where((row) => row['type'] == 'KHET_PURCHASE' && thisMonth(row)).toList();
     final monthVendorTotal = vendorPurchases.fold<double>(
       0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['amount'] ?? row['price']),
@@ -154,7 +154,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final applied = availablePayments < unpaid ? availablePayments : unpaid;
         availablePayments -= applied;
         final remaining = unpaid - applied;
-        if (remaining > 0.009 && thisMonth(expense)) {
+        if (remaining > 0.009) {
           khetExpensePending.add({
             ...expense,
             'dashboardBalance': remaining,
@@ -163,7 +163,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
     }
-    final pending=[...tractorPending,...vendorPending,...khetExpensePending]
+    final allVendorIds = khet.where((r) => r['type'] == 'KHET_PURCHASE').map((r) => r['vendorId']).where((id) => id != null).toSet();
+    final vendorPendingAll = <Map<String, dynamic>>[];
+    for (final vendorId in allVendorIds) {
+      final purchases = khet.where((r) => r['type'] == 'KHET_PURCHASE' && r['vendorId'] == vendorId).toList()
+        ..sort((a, b) => (a['invoiceDate'] ?? a['date'] ?? '').toString().compareTo((b['invoiceDate'] ?? b['date'] ?? '').toString()));
+      var available = khet.where((r) => r['type'] == 'KHET_PURCHASE_PAYMENT' && r['vendorId'] == vendorId)
+          .fold<double>(0, (sum, r) => sum + _amount(r['amount']));
+      for (final purchase in purchases) {
+        final base = (_amount(purchase['totalAmount']) - _amount(purchase['paidAmount'])).clamp(0, double.infinity).toDouble();
+        final applied = available < base ? available : base;
+        available -= applied;
+        final balance = base - applied;
+        if (balance > 0.009) vendorPendingAll.add({...purchase, 'dashboardBalance': balance, 'pendingKind': 'PURCHASE'});
+      }
+    }
+    final kuaCashPending = khet.where((row) => row['type'] == 'KUA' && _amount(row['cashBalance'] ?? (_amount(row['cashAmount']) - _amount(row['cashPaid']))) > 0.009).map((row) => <String, dynamic>{
+      ...row,
+      'totalAmount': _amount(row['cashAmount']),
+      'paidAmount': _amount(row['cashPaid']),
+      'balance': _amount(row['cashBalance'] ?? (_amount(row['cashAmount']) - _amount(row['cashPaid']))),
+      'pendingKind': 'KUA_CASH',
+    }).toList();
+    final pending=[...tractorPending,...vendorPendingAll,...khetExpensePending,...kuaCashPending]
       ..sort((a,b)=>(DateTime.tryParse(a['dueDate'] as String? ?? '')??DateTime(9999))
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '')??DateTime(9999)));
     final pendingTotal=pending.fold<double>(0,(sum,row)=>sum+_balance(row));
@@ -202,7 +224,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _PendingPaymentsScreen(rows: pending, waterRows: khet.where((r) => ((r['type'] == 'PANI' && r['waterPaymentPending'] == true) || (r['type'] == 'KUA' && _amount(r['waterRemainingMinutes'] ?? r['exchangeMinutes']) > 0)) && thisMonth(r)).toList(), money: money, storage: storage, monthTitle: DateFormat('MMMM yyyy').format(selectedDate)),
+              builder: (_) => _PendingPaymentsScreen(rows: pending, waterRows: khet.where((r) => (r['type'] == 'PANI' && r['waterPaymentPending'] == true) || (r['type'] == 'KUA' && _amount(r['waterRemainingMinutes'] ?? r['waterOwedMinutes'] ?? r['exchangeMinutes']) > 0)).toList(), money: money, storage: storage, monthTitle: DateFormat('MMMM yyyy').format(selectedDate)),
             )),
             child: _MetricCard(title: 'Pending payments', value: money.format(pendingTotal), icon: Icons.pending_actions, tint: const Color(0xFFE5F2EC)),
           )),
@@ -856,9 +878,15 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
         .toDouble();
   }
 
-  int _waterOwedMinutes(Map<String, dynamic> row) => row['type'] == 'KUA'
-      ? _amount(row['waterOwedMinutes'] ?? row['exchangeMinutes']).toInt()
-      : _amount(row['borrowedMinutes']).toInt() + _amount(row['borrowedNaharMinutes']).toInt() + _amount(row['borrowedKuaMinutes']).toInt();
+  int _waterOwedMinutes(Map<String, dynamic> row) {
+    if (row['type'] == 'KUA') {
+      return _amount(row['waterOwedMinutes'] ?? row['exchangeMinutes']).toInt();
+    }
+    final nahar = _amount(row['borrowedNaharMinutes']).toInt();
+    final kua = _amount(row['borrowedKuaMinutes']).toInt();
+    final splitTotal = nahar + kua;
+    return splitTotal > 0 ? splitTotal : _amount(row['borrowedMinutes']).toInt();
+  }
 
   int _waterExchangedMinutes(Map<String, dynamic> row) {
     final history = row['waterExchangeHistory'];
