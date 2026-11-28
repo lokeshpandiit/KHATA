@@ -141,7 +141,7 @@ class HistoryProjection {
 
       final type = isWater ? 'PANI' : 'KHET';
       final contact = _value(record['contact']);
-      final source = _value(record['source'] ?? record['wellSelection']);
+      final source = _value(record['source'] ?? record['wellType'] ?? record['wellSelection']);
       final title = isWater
           ? '${contact.isEmpty ? 'Pani' : contact} · ${source.isEmpty ? (kind == 'KUA' ? 'Kua' : 'Pani') : source}'
           : (_value(record['title']).isEmpty
