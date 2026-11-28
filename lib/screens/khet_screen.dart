@@ -1965,7 +1965,20 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
         'direction': _direction,
         'wellSelection': _well,
         'wellMinutes': mins,
-        'exchangeMinutes': int.tryParse(_exchange.text) ?? 0,
+        'exchangeMinutes': (int.tryParse(_exchange.text) ?? 0) > 0
+            ? int.parse(_exchange.text)
+            : mins.values.fold<int>(0, (sum, value) => sum + value),
+        'waterOwedMinutes': (int.tryParse(_exchange.text) ?? 0) > 0
+            ? int.parse(_exchange.text)
+            : mins.values.fold<int>(0, (sum, value) => sum + value),
+        'waterExchangedMinutes': 0,
+        'waterRemainingMinutes': (int.tryParse(_exchange.text) ?? 0) > 0
+            ? int.parse(_exchange.text)
+            : mins.values.fold<int>(0, (sum, value) => sum + value),
+        'waterExchangeHistory': <Map<String, dynamic>>[],
+        'waterPaymentPending': ((int.tryParse(_exchange.text) ?? 0) > 0
+            ? int.parse(_exchange.text)
+            : mins.values.fold<int>(0, (sum, value) => sum + value) > 0),
         'cashAmount': cash,
         'cashPaid': paid,
         'cashBalance': cash - paid,
