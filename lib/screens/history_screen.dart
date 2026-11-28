@@ -16,7 +16,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   String _filter = 'All';
 
   DateTime _date(Map<String, dynamic> row) {
-    for (final key in ['updatedAt', 'createdAt', 'date']) {
+    for (final key in ['date', 'createdAt', 'updatedAt']) {
       final value = row[key];
       if (value is String) {
         final parsed = DateTime.tryParse(value);
@@ -51,6 +51,20 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
     for (final r in _storage.records('hisabs')) {
       final title = _str(r['title']).isEmpty ? _str(r['category']) : _str(r['title']);
+      // Standalone person-to-person payments are individual history events.
+      if (r['paymentKind'] == 'PERSON_PAYMENT' || r['entryType'] == 'PAYMENT') {
+        final person = _str(r['personName']);
+        final paymentTitle = _str(r['title']).isNotEmpty ? _str(r['title']) : (r['direction'] == 'PAID' ? 'आपने पैसे दिए' : 'आपको पैसे मिले');
+        final amount = _str(r['amount']);
+        final balance = r['balanceAfter'];
+        all.add(_Item('HISAB', '$paymentTitle${person.isNotEmpty ? ' · $person' : ''}', [
+          if (_str(r['direction']).isNotEmpty) _str(r['direction']),
+          if (amount.isNotEmpty) '₹$amount',
+          if (balance != null) 'Balance ₹$balance',
+          if (_str(r['note']).isNotEmpty) _str(r['note']),
+        ].where((s)=>s.isNotEmpty).join(' · '), _date(r)));
+        continue;
+      }
       all.add(_Item('HISAB', title,
         [_str(r['category']), if (_str(r['amount']).isNotEmpty) '₹${r['amount']}', _str(r['note'])].where((s)=>s.isNotEmpty).join(' · '), _date(r)));
       addPaymentRows(r, 'HISAB', title);
