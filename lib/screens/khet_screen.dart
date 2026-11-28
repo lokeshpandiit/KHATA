@@ -689,12 +689,20 @@ class _KhetScreenState extends State<KhetScreen> {
       final cash = _amount(row['cashAmount']);
       final paid = _amount(row['cashPaid']);
       final balance = (cash - paid).clamp(0, double.infinity).toDouble();
+      final waterOwed = _amount(row['waterOwedMinutes'] ?? row['exchangeMinutes']).toInt();
+      final waterHistory = (row['waterExchangeHistory'] as List? ?? const []).whereType<Map>().toList();
+      final waterReturned = waterHistory.fold<int>(0, (sum, item) => sum + _amount(item['minutes']).toInt());
+      final waterLeft = (waterOwed - waterReturned).clamp(0, 999999);
+      final waterLog = waterHistory.map((item) {
+        final d = DateTime.tryParse((item['date'] ?? '').toString());
+        return '${d == null ? '' : dateLabel(d)}: ${formatMinutes(_amount(item['minutes']).toInt())} liya · baki ${formatMinutes(_amount(item['balanceAfter']).toInt())}';
+      }).join(' | ');
       return Card(margin: const EdgeInsets.only(bottom: 9), child: ListTile(
         leading: const CircleAvatar(child: Icon(Icons.water_drop_outlined)),
         title: Text((row['contact'] ?? 'Kua hisab').toString()),
         subtitle: Text('${row['direction'] ?? ''}
 $mins
-Badle mein: ${formatMinutes((row['exchangeMinutes'] as num?)?.toInt() ?? 0)} · Cash ₹${cash.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)} · Baaki ₹${balance.toStringAsFixed(0)}'),
+Pani lena baki: ${formatMinutes(waterLeft)} · Cash ₹${cash.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)} · Baaki ₹${balance.toStringAsFixed(0)}${waterLog.isEmpty ? '' : '\nWater history: $waterLog'}'),
         isThreeLine: true,
       ));
     }
