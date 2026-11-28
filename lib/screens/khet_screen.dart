@@ -70,9 +70,6 @@ class _KhetScreenState extends State<KhetScreen> {
       final seasonMatch = _seasonFilter == 'All seasons' || row['season'] == _seasonFilter;
       final yearMatch = _yearFilter == null ||
           (date != null ? date.year == _yearFilter : row['year'] == _yearFilter);
-      final searchable =
-          '${row['title'] ?? ''} ${row['note'] ?? ''} ${row['contact'] ?? ''} ${row['source'] ?? ''} ${row['wellType'] ?? ''} ${row['customerName'] ?? ''} ${row['farmName'] ?? ''} ${row['work'] ?? ''} ${row['cropName'] ?? ''} ${row['seedName'] ?? ''} ${row['purpose'] ?? ''}'
-              .toLowerCase();
       return typeMatch && monthMatch && seasonMatch && yearMatch;
     }).toList()
       ..sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
