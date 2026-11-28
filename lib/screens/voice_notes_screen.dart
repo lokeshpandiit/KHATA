@@ -55,6 +55,20 @@ class _VoiceNotesScreenState extends State<VoiceNotesScreen> {
       return person == null ? '$source का $action' : '$source का $action - $person से';
     }
 
+    // Farm input purchases: create a short category title, not the full transcript.
+    final isPurchase = lower.contains('खरीद') || lower.contains(' खरीदा') || lower.contains('purchase') || lower.contains('bought') || lower.contains('buy');
+    if (isPurchase) {
+      final items = <String>[];
+      if (lower.contains('खाद') || lower.contains('fertilizer') || lower.contains('khaad')) items.add('खाद');
+      if (lower.contains('बीज') || lower.contains('seed') || lower.contains('beej')) items.add('बीज');
+      if (lower.contains('दवा') || lower.contains('स्प्रे') || lower.contains('pesticide') || lower.contains('spray')) items.add('दवा/स्प्रे');
+      if (lower.contains('डीजल') || lower.contains('diesel')) items.add('डीजल');
+      if (lower.contains('कीटनाशक') || lower.contains('insecticide')) items.add('कीटनाशक');
+      if (items.isEmpty) items.add('सामान खरीदा');
+      final person = _extractPerson(t, fromMarkers: ['से', 'se'], toMarkers: ['को', 'ko']);
+      return person == null ? '${items.join(' और ')} खरीदी' : '${items.join(' और ')} खरीदी - ${person} से';
+    }
+
     // Money transactions: distinguish money received from money paid.
     final isMoney = lower.contains('पैसे') || lower.contains('रुपये') || lower.contains('रुपए') ||
         lower.contains('रुपया') || lower.contains('paise') || lower.contains('paisa') ||
