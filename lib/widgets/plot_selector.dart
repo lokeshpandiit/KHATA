@@ -21,7 +21,11 @@ String currentCropForPlot(StorageBackupService storage, dynamic plotId) {
     return db.compareTo(da);
   });
   if (crops.isEmpty) return '';
-  return (crops.first['cropName'] ?? crops.first['title'] ?? '').toString().trim();
+  final latest = crops.first;
+  if (latest['harvested'] == true || latest['cropCycleStatus'] == 'COMPLETED') {
+    return '';
+  }
+  return (latest['cropName'] ?? latest['title'] ?? '').toString().trim();
 }
 
 String plotLabelForId(StorageBackupService storage, dynamic plotId) {
