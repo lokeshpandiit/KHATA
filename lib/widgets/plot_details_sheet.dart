@@ -163,9 +163,11 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
       builder: (context, _, __) {
         final plotRecords = storage.records('khet').where((row) => row['plotId'] == widget.plot['id']).toList();
         final cropCycles = _latest(plotRecords.where((row) => row['type'] == 'FASAL').toList());
-        final selectedCycle = cropCycles.where((row) => row['cropCycleId'] == _selectedCropCycleId).toList().firstOrNull ??
-            cropCycles.where((row) => row['harvested'] != true).toList().firstOrNull ??
-            cropCycles.firstOrNull;
+        final selectedMatches = cropCycles.where((row) => row['cropCycleId'] == _selectedCropCycleId).toList();
+        final activeMatches = cropCycles.where((row) => row['harvested'] != true).toList();
+        final selectedCycle = selectedMatches.isNotEmpty ? selectedMatches.first :
+            activeMatches.isNotEmpty ? activeMatches.first :
+            cropCycles.isNotEmpty ? cropCycles.first : null;
         final selectedCycleId = selectedCycle?['cropCycleId']?.toString();
         if (_selectedCropCycleId == null && selectedCycleId != null) _selectedCropCycleId = selectedCycleId;
         final entries = _latest(plotRecords.where((row) {
