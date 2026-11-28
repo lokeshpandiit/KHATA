@@ -1860,26 +1860,6 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
               labelText: widget.type == 'DAWAI' ? 'Dawai ka kharcha (₹)' : widget.type == 'KHAD' ? 'Khaad ka kharcha (₹)' : 'Price / kharcha (₹)',
             ),
           ),
-          if (widget.type == 'DAWAI' && false) ...[
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Is dawai ke liye future reminder lagayein'),
-              value: _reminderEnabled,
-              onChanged: (value) => setState(() {
-                _reminderEnabled = value;
-                if (!value) _reminderAt = null;
-              }),
-            ),
-            if (_reminderEnabled)
-              OutlinedButton.icon(
-                onPressed: _pickReminder,
-                icon: const Icon(Icons.notifications_active_outlined),
-                label: Text(_reminderAt == null
-                  ? 'Reminder date aur time chunein'
-                  : 'Reminder: ' + DateFormat('dd MMM yyyy, hh:mm a').format(_reminderAt!)),
-              ),
-          ],
           const SizedBox(height: 12),
           VoiceDictationField(
             controller: _note,
