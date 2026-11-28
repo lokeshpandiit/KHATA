@@ -19,10 +19,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   DateTime? _date(Map<String, dynamic> row) {
-    for (final key in ['date', 'createdAt', 'updatedAt']) {
+    // Purchase records may use invoiceDate even when date is missing.
+    for (final key in ['invoiceDate', 'date', 'createdAt', 'updatedAt', 'billDate']) {
       final value = row[key];
-      if (value is String) {
-        final parsed = DateTime.tryParse(value);
+      if (value is DateTime) return value;
+      if (value != null) {
+        final parsed = DateTime.tryParse(value.toString());
         if (parsed != null) return parsed;
       }
     }
@@ -104,8 +106,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
     final tractorPending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0 && thisMonth(row)).toList();
     final vendorPurchases = khet.where((row) => row['type'] == 'KHET_PURCHASE' && thisMonth(row)).toList();
-    final monthVendorTotal = vendorPurchases.fold<double>(0,(sum,row)=>sum+_amount(row['totalAmount']));
-    final monthVendorPaid = vendorPurchases.fold<double>(0,(sum,row)=>sum+_amount(row['paidAmount']));
+    final monthVendorTotal = vendorPurchases.fold<double>(
+      0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['amount'] ?? row['price']),
+    );
+    // Include payment made at the time of purchase. Later payment records
+    // are added separately below for the selected month.
+    final monthVendorPaid = vendorPurchases.fold<double>(
+      0, (sum, row) => sum + _amount(row['paidAmount']),
+    );
     final vendorIds = vendorPurchases.map((r)=>r['vendorId']).where((id)=>id!=null).toSet();
     final vendorPending = <Map<String,dynamic>>[];
     for(final vendorId in vendorIds){
