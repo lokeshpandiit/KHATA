@@ -144,6 +144,7 @@ class StorageBackupService {
       throw ArgumentError.value(category, 'category', 'Unknown data collection');
     }
     final rows = _data.putIfAbsent(category, () => []);
+    record.putIfAbsent('createdAt', () => DateTime.now().toIso8601String());
     final id = record['id']?.toString().trim() ?? '';
     // A repeated submit/retry with the same generated ID must be idempotent.
     if (id.isNotEmpty && rows.any((item) => item['id']?.toString() == id)) return;
@@ -167,6 +168,18 @@ class StorageBackupService {
     if (rows == null) return;
     final index = rows.indexWhere((item) => item['id'] == id);
     if (index < 0) return;
+    final previous = rows[index];
+    updated.putIfAbsent('createdAt', () => previous['createdAt'] ?? DateTime.now().toIso8601String());
+    updated['updatedAt'] = DateTime.now().toIso8601String();
+    for (final key in ['payments', 'waterCashPaymentHistory', 'waterExchangeHistory']) {
+      final oldList = previous[key] is List ? previous[key] as List : const [];
+      final newList = updated[key] is List ? updated[key] as List : null;
+      if (newList == null) continue;
+      for (var i = oldList.length; i < newList.length; i++) {
+        final child = newList[i];
+        if (child is Map) child.putIfAbsent('enteredAt', () => DateTime.now().toIso8601String());
+      }
+    }
     rows[index] = updated;
     await _save();
   }
