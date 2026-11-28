@@ -200,6 +200,90 @@ class _HisabScreenState extends State<HisabScreen> {
     ]).toList();
   }
 
+  Future<void> _recordHisabExpensePayment(Map<String, dynamic> row) async {
+    final records = _storage.records('hisabs')
+        .where((r) => r['id']?.toString() == row['id']?.toString())
+        .toList();
+    if (records.isEmpty) return;
+    final original = records.first;
+    final total = _amount(original['totalAmount'] ?? original['amount']);
+    final paid = _amount(original['paidAmount']);
+    final before = (total - paid).clamp(0, double.infinity).toDouble();
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+    String direction = 'Diya';
+    DateTime paymentDate = DateTime.now();
+    final history = (original['payments'] as List? ?? const [])
+        .whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList();
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
+        title: Text('Payment · ${original['personName'] ?? 'Expense'}'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Total ₹${total.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)} · Baki ₹${before.toStringAsFixed(0)}'),
+          DropdownButtonFormField<String>(
+            value: direction,
+            decoration: const InputDecoration(labelText: 'Payment type'),
+            items: const [
+              DropdownMenuItem(value: 'Diya', child: Text('Paise diye')),
+              DropdownMenuItem(value: 'Liya', child: Text('Paise wapas liye')),
+            ],
+            onChanged: (value) => setDialog(() => direction = value ?? direction),
+          ),
+          TextField(controller: amountController, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: direction == 'Diya' ? 'Kitne paise diye?' : 'Kitne paise wapas mile?')),
+          Text('Baad mein baki ₹${(direction == 'Diya' ? before - _amount(amountController.text) : before + _amount(amountController.text)).clamp(0, double.infinity).toStringAsFixed(0)}'),
+          TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note (optional)')),
+          OutlinedButton.icon(icon: const Icon(Icons.calendar_today),
+            label: Text('Date: ${DateFormat('dd MMM yyyy').format(paymentDate)}'),
+            onPressed: () async {
+              final picked = await showDatePicker(context: ctx, initialDate: paymentDate,
+                firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 3650)));
+              if (picked != null) setDialog(() => paymentDate = picked);
+            }),
+          if (history.isNotEmpty) ...[
+            const Divider(),
+            Align(alignment: Alignment.centerLeft, child: Text('Payment history: ${history.length} entries')),
+          ],
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () {
+            final amount = _amount(amountController.text);
+            final limit = direction == 'Diya' ? before : paid;
+            if (amount <= 0 || amount > limit + 0.009) {
+              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('1 se ₹${limit.toStringAsFixed(0)} ke beech amount bharein')));
+              return;
+            }
+            Navigator.pop(ctx, {'amount': amount, 'direction': direction, 'date': paymentDate, 'note': noteController.text.trim()});
+          }, child: const Text('Save payment')),
+        ],
+      )),
+    );
+    amountController.dispose();
+    noteController.dispose();
+    if (result == null) return;
+    final amount = (result['amount'] as num).toDouble();
+    direction = result['direction'] as String;
+    final newPaid = direction == 'Diya' ? paid + amount : paid - amount;
+    final after = (total - newPaid).clamp(0, double.infinity).toDouble();
+    history.add({
+      'amount': amount,
+      'direction': direction,
+      'date': (result['date'] as DateTime).toIso8601String(),
+      'note': result['note'],
+      'balanceBefore': before,
+      'balanceAfter': after,
+    });
+    final updated = Map<String, dynamic>.from(original)
+      ..['paidAmount'] = newPaid
+      ..['balance'] = after
+      ..['status'] = after <= 0.009 ? 'PAID' : (newPaid > 0 ? 'PARTIAL' : 'PENDING')
+      ..['payments'] = history;
+    await _storage.updateRecord('hisabs', original['id'].toString(), updated);
+    if (mounted) setState(() {});
+  }
+
   Widget _hisabCard(Map<String, dynamic> row) {
     final amount = row['amount']?.toString() ?? '';
     final isExpense = row['entryType'] == 'EXPENSE';
@@ -229,11 +313,26 @@ class _HisabScreenState extends State<HisabScreen> {
             isExpense ? 'Khet expense · ${row['expenseCategory'] ?? 'Other'}' : (row['category'] as String? ?? 'Other'),
             style: const TextStyle(color: Colors.black54),
           ),
-          if (isExpense)
+          if (isExpense) ...[
             Text(
               'Paid ₹${row['paidAmount'] ?? 0} · Pending ₹${row['balance'] ?? 0} · ${_expensePlotSummary(row)}',
               style: const TextStyle(color: Colors.black54, fontSize: 12),
             ),
+            if (_amount(row['balance'] ?? (_amount(row['totalAmount'] ?? row['amount']) - _amount(row['paidAmount']))) > 0.009 || _amount(row['paidAmount']) > 0.009)
+              Align(alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => _recordHisabExpensePayment(row),
+                  icon: const Icon(Icons.payments_outlined),
+                  label: const Text('Add / Update Payment'),
+                )),
+            ...((row['payments'] as List? ?? const []).whereType<Map>().map((p) {
+              final date = DateTime.tryParse((p['date'] ?? '').toString());
+              return Text(
+                '${date == null ? '' : DateFormat('dd MMM yyyy').format(date)} · ${p['direction'] ?? 'Diya'} ₹${_amount(p['amount']).toStringAsFixed(0)} · Pehle ₹${_amount(p['balanceBefore']).toStringAsFixed(0)} · Baad mein ₹${_amount(p['balanceAfter']).toStringAsFixed(0)}',
+                style: const TextStyle(color: Colors.black54, fontSize: 11),
+              );
+            })),
+          ],
           if ((row['note'] as String? ?? '').isNotEmpty) ...[
             const SizedBox(height: 7), Text(row['note'] as String),
           ],
