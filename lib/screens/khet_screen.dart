@@ -60,15 +60,18 @@ class _KhetScreenState extends State<KhetScreen> {
     return _entries.where((row) {
       final date = DateTime.tryParse(row['date'] as String? ?? '');
       final category = row['type'] as String? ?? '';
-      final isPending = category == 'TRACTOR' && _balance(row) > 0;
+      final isPending = category == 'TRACTOR' ? _balance(row) > 0 : category == 'KHET_PURCHASE' && _purchaseBalance(row) > 0;
       final isPersonWaterLedger = category == 'PANI' && row['ledgerMode'] == 'PERSON';
+      final isPurchase = category == 'KHET_PURCHASE' || category == 'KHET_PURCHASE_PAYMENT' || category == 'KHET_STOCK_USE';
       final typeMatch = _tab == 'ALL' ||
           (_tab == 'PENDING'
               ? isPending
-              : _tab == 'KUA'
-                  ? (category == 'KUA' && row['direction'] == 'Dusre ne hamara kua chalaya') ||
-                      (isPersonWaterLedger && row['direction'] == 'Diya')
-                  : category == _tab);
+              : _tab == 'PURCHASE'
+                  ? isPurchase
+                  : _tab == 'KUA'
+                      ? (category == 'KUA' && row['direction'] == 'Dusre ne hamara kua chalaya') ||
+                          (isPersonWaterLedger && row['direction'] == 'Diya')
+                      : category == _tab);
       final monthMatch = _month == 'All months' ||
           (date != null && monthKey(date) == _month);
       final seasonMatch = _seasonFilter == 'All seasons' || row['season'] == _seasonFilter;
@@ -99,6 +102,8 @@ class _KhetScreenState extends State<KhetScreen> {
       await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => const AddTractorWorkScreen(),
       ));
+    } else if (_tab == 'PURCHASE') {
+      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const KhetPurchaseScreen()));
     } else {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -114,7 +119,7 @@ class _KhetScreenState extends State<KhetScreen> {
       context: context,
       builder: (context) => SafeArea(
         child: Wrap(
-          children: ['DAWAI', 'KHAD', 'FASAL', 'TRACTOR', 'OTHER']
+          children: ['PURCHASE', 'DAWAI', 'KHAD', 'FASAL', 'TRACTOR', 'OTHER']
               .map((item) => ListTile(
                     leading: Icon(item == 'TRACTOR' ? Icons.agriculture : Icons.add_circle_outline),
                     title: Text(item),
@@ -158,6 +163,59 @@ class _KhetScreenState extends State<KhetScreen> {
     }
   }
 
+  List<Map<String, dynamic>> _vendorPurchases(dynamic vendorId) => _entries.where((r) => r['type']=='KHET_PURCHASE' && r['vendorId']==vendorId).toList();
+  List<Map<String, dynamic>> _vendorPayments(dynamic vendorId) => _entries.where((r) => r['type']=='KHET_PURCHASE_PAYMENT' && r['vendorId']==vendorId).toList();
+  double _vendorBalance(dynamic vendorId) {
+    final p=_vendorPurchases(vendorId);
+    return p.fold<double>(0,(s,r)=>s+_amount(r['totalAmount'])-_amount(r['paidAmount']))-
+      _vendorPayments(vendorId).fold<double>(0,(s,r)=>s+_amount(r['amount']));
+  }
+  double _purchaseBalance(Map<String,dynamic> purchase) {
+    final purchases=_vendorPurchases(purchase['vendorId'])..sort((a,b)=>(a['invoiceDate']??a['date']??'').toString().compareTo((b['invoiceDate']??b['date']??'').toString()));
+    var pay=_vendorPayments(purchase['vendorId']).fold<double>(0,(s,r)=>s+_amount(r['amount']));
+    for(final p in purchases){
+      var balance=(_amount(p['totalAmount'])-_amount(p['paidAmount'])).clamp(0,double.infinity).toDouble();
+      final applied=pay<balance?pay:balance;balance-=applied;pay-=applied;
+      if(p['id']==purchase['id'])return balance;
+    }
+    return _balance(purchase);
+  }
+  Widget _vendorNetCards(){
+    final ids=_entries.where((r)=>r['type']=='KHET_PURCHASE').map((r)=>r['vendorId']).where((id)=>id!=null).toSet();
+    if(ids.isEmpty)return const SizedBox.shrink();
+    return SizedBox(height:108,child:ListView(scrollDirection:Axis.horizontal,padding:const EdgeInsets.symmetric(horizontal:12),children:ids.map((id){
+      final purchases=_vendorPurchases(id);final name=(purchases.first['vendorName']??'Shop').toString();final balance=_vendorBalance(id);
+      return SizedBox(width:220,child:Card(child:InkWell(onTap:()=>_showVendorLedger(id),child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text(name,style:const TextStyle(fontWeight:FontWeight.w800)),const Spacer(),
+        Text(balance>=0?'Pending ₹${balance.toStringAsFixed(0)}':'Advance ₹${balance.abs().toStringAsFixed(0)}',style:TextStyle(fontWeight:FontWeight.w800,color:balance>0?Colors.red:Colors.green)),
+        const Text('Tap to open vendor khata',style:TextStyle(fontSize:11)),
+      ])))));
+    }).toList()));
+  }
+  Future<void> _showVendorLedger(dynamic vendorId)async{
+    final p=_vendorPurchases(vendorId);if(p.isEmpty)return;
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder:(_)=>KhetVendorLedgerScreen(vendorId:vendorId.toString(),vendorName:(p.first['vendorName']??'Shop').toString())));
+    if(mounted)setState((){});
+  }
+  Future<void> _usePurchaseStock(Map<String,dynamic> purchase)async{
+    final available=(_amount(purchase['quantity'])-_entries.where((r)=>r['type']=='KHET_STOCK_USE'&&r['purchaseId']==purchase['id']).fold<double>(0,(s,r)=>s+_amount(r['quantityUsed']))).clamp(0,double.infinity).toDouble();
+    if(available<=0){_error('Is purchase ka stock poora use ho chuka hai.');return;}
+    final qty=TextEditingController();String? plotId;DateTime date=DateTime.now();
+    final result=await showDialog<Map<String,dynamic>>(context:context,builder:(ctx)=>StatefulBuilder(builder:(ctx,setD){
+      final plots=_storage.records('plots').where((p)=>p['isMine']!=false).toList();
+      return AlertDialog(title:Text('Use ${purchase['title']} in Khet'),content:Column(mainAxisSize:MainAxisSize.min,children:[
+        Text('Available ${available.toStringAsFixed(2)} ${purchase['unit']??''}'),
+        TextField(controller:qty,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'Quantity used')),
+        DropdownButtonFormField<String>(value:plotId,decoration:const InputDecoration(labelText:'Killa'),items:plots.map((p)=>DropdownMenuItem(value:p['id'].toString(),child:Text(plotLabel(p)))).toList(),onChanged:(v)=>setD(()=>plotId=v)),
+        OutlinedButton(onPressed:()async{final p=await showDatePicker(context:ctx,initialDate:date,firstDate:DateTime(DateTime.now().year-8),lastDate:DateTime(DateTime.now().year+8));if(p!=null)setD(()=>date=p);},child:Text('Use date: ${dateLabel(date)}')),
+      ]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),FilledButton(onPressed:(){final n=double.tryParse(qty.text);if(n!=null&&n>0&&n<=available&&plotId!=null)Navigator.pop(ctx,{'qty':n,'plot':plotId,'date':date});},child:const Text('Save'))]);
+    }));
+    qty.dispose();if(result==null)return;
+    final cycle=_cropCycleForDate(_storage,result['plot'] as String,result['date'] as DateTime);
+    final q=_amount(purchase['quantity']);final unitCost=_amount(purchase['totalAmount'])/(q<=0?1:q);
+    await _storage.addRecord('khet',{'id':DateTime.now().microsecondsSinceEpoch.toString(),'type':'KHET_STOCK_USE','purchaseId':purchase['id'],'title':purchase['title'],'purchaseCategory':purchase['purchaseCategory'],'quantityUsed':result['qty'],'unit':purchase['unit'],'price':unitCost*(result['qty'] as double),'plotId':result['plot'],'cropCycleId':cycle?['cropCycleId'],'cropAtUse':cycle?['cropName']??cycle?['title'],'vendorId':purchase['vendorId'],'vendorName':purchase['vendorName'],'date':(result['date'] as DateTime).toIso8601String(),'note':'Purchase date: ${purchase['invoiceDate']}'});
+    if(mounted)setState((){});
+  }
   bool _isPersonWaterLedger(Map<String, dynamic> row) =>
       row['type'] == 'PANI' && row['ledgerMode'] == 'PERSON';
 
@@ -489,7 +547,7 @@ class _KhetScreenState extends State<KhetScreen> {
     final months = availableMonths(_entries);
     if (!months.contains(_month)) _month = 'All months';
     final rows = _filtered;
-    const tabs = ['ALL', 'DAWAI', 'KHAD', 'FASAL', 'TRACTOR', 'KUA', 'OTHER'];
+    const tabs = ['ALL', 'PURCHASE', 'DAWAI', 'KHAD', 'FASAL', 'TRACTOR', 'KUA', 'OTHER'];
     final addLabel = switch (_tab) {
       'DAWAI' => 'Add Dawai',
       'KHAD' => 'Add Khaad',
@@ -498,6 +556,7 @@ class _KhetScreenState extends State<KhetScreen> {
       'PANI' => 'Add Pani',
       'TRACTOR' || 'PENDING' => 'Add Tractor',
       'KUA' => 'Add Kua Hisab',
+      'PURCHASE' => 'Add Purchase',
       'OTHER' => 'Add Other',
       _ => 'Add',
     };
@@ -569,6 +628,7 @@ class _KhetScreenState extends State<KhetScreen> {
               ),
             ),
           if (_tab == 'PANI') _personWaterNetCards(),
+          if (_tab == 'PURCHASE') _vendorNetCards(),
           Expanded(
             child: rows.isEmpty
                 ? emptyState(
@@ -607,6 +667,27 @@ class _KhetScreenState extends State<KhetScreen> {
   }
 
   Widget _entryCard(Map<String, dynamic> row) {
+    if (row['type'] == 'KHET_STOCK_USE') {
+      final d=DateTime.tryParse(row['date'] as String? ?? '');
+      return Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.grass_outlined)),title:Text('Stock use · ${row['title']}'),subtitle:Text('${row['quantityUsed']} ${row['unit']??''} · ${row['plotId']==null?'-':_plotLabel(row['plotId'])} · ₹${_amount(row['price']).toStringAsFixed(0)}${d==null?'':' · ${dateLabel(d)}'}')));
+    }
+    if (row['type'] == 'KHET_PURCHASE_PAYMENT') {
+      final d=DateTime.tryParse(row['date'] as String? ?? '');
+      return Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.payments_outlined)),title:Text('Payment · ${row['vendorName']??'Vendor'}'),subtitle:Text('₹${_amount(row['amount']).toStringAsFixed(0)} paid${d==null?'':' · ${dateLabel(d)}'}')));
+    }
+    if (row['type'] == 'KHET_PURCHASE') {
+      final balance=_purchaseBalance(row);final d=DateTime.tryParse(row['invoiceDate'] as String? ?? row['date'] as String? ?? '');
+      final photos=_paths(row,'itemPhotos','itemPhoto')+_paths(row,'billPhotos','billPhoto');
+      return Card(margin:const EdgeInsets.only(bottom:9),child:Padding(padding:const EdgeInsets.all(12),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Row(children:[const CircleAvatar(child:Icon(Icons.shopping_bag_outlined)),const SizedBox(width:8),Expanded(child:Text('${row['title']} · ${row['vendorName']}',style:const TextStyle(fontWeight:FontWeight.w800))),Text(balance<=0?'PAID':'PENDING',style:TextStyle(color:balance>0?Colors.red:Colors.green,fontWeight:FontWeight.bold))]),
+        Text('${row['purchaseCategory']} · ${row['quantity']} ${row['unit']}'),
+        Text('Bill date: ${d==null?'-':dateLabel(d)}'),
+        Wrap(spacing:10,children:[Text('Bill ₹${_amount(row['totalAmount']).toStringAsFixed(0)}'),Text('Paid ₹${_amount(row['paidAmount']).toStringAsFixed(0)}'),Text('Pending ₹${balance.toStringAsFixed(0)}')]),
+        if(balance>0&&row['dueDate']!=null)Text('Due: ${dateLabel(DateTime.parse(row['dueDate']))}',style:const TextStyle(color:Colors.deepOrange)),
+        if(photos.isNotEmpty)Wrap(spacing:6,children:photos.toSet().map((p)=>InkWell(onTap:()=>_preview(p),child:mediaThumbnail(p,size:64))).toList()),
+        Wrap(spacing:8,children:[OutlinedButton.icon(onPressed:()=>_showVendorLedger(row['vendorId']),icon:const Icon(Icons.account_balance_wallet_outlined),label:const Text('Vendor Khata')),if(_amount(row['quantity'])>0)FilledButton.tonalIcon(onPressed:()=>_usePurchaseStock(row),icon:const Icon(Icons.grass_outlined),label:const Text('Use in Khet'))]),
+      ])));
+    }
     if (row['type'] == 'KUA') {
       final mins = (row['wellMinutes'] as Map? ?? const {}).entries
           .map((e) => '${e.key}: ${formatMinutes((e.value as num).toInt())}').join(' · ');
@@ -799,6 +880,21 @@ class _KhetScreenState extends State<KhetScreen> {
       ),
     ));
   }
+}
+
+Map<String,dynamic>? _cropCycleForDate(StorageBackupService storage,String plotId,DateTime date){
+  final day=DateUtils.dateOnly(date);
+  final crops=storage.records('khet').where((r){
+    if(r['type']!='FASAL'||r['plotId']!=plotId)return false;
+    final sow=DateTime.tryParse((r['sowingDate']??r['date']??'').toString());
+    if(sow==null||DateUtils.dateOnly(sow).isAfter(day))return false;
+    final harvest=DateTime.tryParse((r['harvestDate']??'').toString());
+    final completed=r['harvested']==true||r['cropCycleStatus']=='COMPLETED';
+    if(completed&&harvest==null)return false;
+    return harvest==null||!day.isAfter(DateUtils.dateOnly(harvest));
+  }).toList()..sort((a,b)=>(DateTime.tryParse((b['sowingDate']??b['date']??'').toString())??DateTime(0)).compareTo(DateTime.tryParse((a['sowingDate']??a['date']??'').toString())??DateTime(0)));
+  if(crops.isEmpty)return null;
+  final c=Map<String,dynamic>.from(crops.first);c['cropCycleId']=c['cropCycleId']??'legacy_${c['id']??plotId}';return c;
 }
 
 String formatMinutes(int minutes) {
@@ -2197,4 +2293,45 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
       ],
     ),
   );
+}
+class KhetPurchaseScreen extends StatefulWidget{const KhetPurchaseScreen({super.key});@override State<KhetPurchaseScreen> createState()=>_KhetPurchaseScreenState();}
+class _KhetPurchaseScreenState extends State<KhetPurchaseScreen>{
+ final _storage=StorageBackupService.instance;final _picker=ImagePicker();final _item=TextEditingController(),_qty=TextEditingController(),_total=TextEditingController(),_paid=TextEditingController(text:'0'),_note=TextEditingController();
+ String? _vendorId;String _category='Dawai',_unit='Packet';DateTime _billDate=DateTime.now();DateTime? _due;String? _billPhoto,_itemPhoto;bool _saving=false;
+ List<Map<String,dynamic>> get contacts=>_storage.records('contacts');
+ @override void dispose(){for(final c in [_item,_qty,_total,_paid,_note])c.dispose();super.dispose();}
+ void _error(String s){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(s)));}
+ Future<void> _pickVendor()async{try{final p=await ContactPickerService.pickPhoneContact();if(p==null)return;final phone=KhataSharingService.normalizePhone((p['phone']??'').toString());final existing=contacts.where((c)=>KhataSharingService.normalizePhone((c['phone']??'').toString())==phone).toList();if(existing.isNotEmpty){setState(()=>_vendorId=existing.first['id'].toString());return;}final id=DateTime.now().microsecondsSinceEpoch.toString();await _storage.addRecord('contacts',{'id':id,'name':p['name'],'phone':p['phone'],'date':DateTime.now().toIso8601String(),'contactType':'FARM_VENDOR'});if(mounted)setState(()=>_vendorId=id);}catch(e){_error('Contact select nahi hua: $e');}}
+ Future<void> _manualVendor()async{final n=TextEditingController(),p=TextEditingController();final r=await showDialog<Map<String,String>>(context:context,builder:(ctx)=>AlertDialog(title:const Text('Dukaan wale ka naam'),content:Column(mainAxisSize:MainAxisSize.min,children:[TextField(controller:n,decoration:const InputDecoration(labelText:'Naam')),TextField(controller:p,keyboardType:TextInputType.phone,decoration:const InputDecoration(labelText:'Phone optional'))]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),FilledButton(onPressed:()=>Navigator.pop(ctx,{'name':n.text.trim(),'phone':p.text.trim()}),child:const Text('Save'))]);n.dispose();p.dispose();if(r==null||r['name']!.isEmpty)return;final id=DateTime.now().microsecondsSinceEpoch.toString();await _storage.addRecord('contacts',{'id':id,'name':r['name'],'phone':r['phone'],'date':DateTime.now().toIso8601String(),'contactType':'FARM_VENDOR'});if(mounted)setState(()=>_vendorId=id);}
+ Future<void> _date(bool due)async{final now=DateTime.now();final picked=await showDatePicker(context:context,initialDate:due?(_due??now):_billDate,firstDate:DateTime(now.year-8),lastDate:DateTime(now.year+8));if(picked!=null&&mounted)setState(()=>due?_due=picked:_billDate=picked);}
+ Future<void> _photo(bool bill,ImageSource source)async{try{final x=await _picker.pickImage(source:source,imageQuality:88);if(x==null)return;final saved=await _storage.keepFile(x.path,folder:'KhetPhotos');if(mounted)setState(()=>bill?_billPhoto=saved:_itemPhoto=saved);}catch(e){_error('Photo save nahi hui: $e');}}
+ Future<void> _save()async{if(_saving)return;final title=_item.text.trim(),qty=double.tryParse(_qty.text.trim())??0,total=double.tryParse(_total.text.trim())??0,paid=double.tryParse(_paid.text.trim())??0;final vendor=contacts.where((c)=>c['id']==_vendorId).toList();if(title.isEmpty||_vendorId==null||vendor.isEmpty){_error('Samaan aur dukaan wale ka naam zaroor bharein');return;}if(total<=0||paid<0||paid>total||qty<0){_error('Bill, quantity aur paid amount sahi bharein');return;}setState(()=>_saving=true);try{final now=DateTime.now(),id=now.microsecondsSinceEpoch.toString(),v=vendor.first;await _storage.addRecord('khet',{'id':id,'type':'KHET_PURCHASE','purchaseCategory':_category,'title':title,'quantity':qty,'unit':_unit,'vendorId':_vendorId,'vendorName':v['name'],'vendorPhone':v['phone'],'totalAmount':total,'paidAmount':paid,'balance':total-paid,'status':paid>=total?'PAID':paid>0?'PARTIAL':'PENDING','invoiceDate':DateTime(_billDate.year,_billDate.month,_billDate.day).toIso8601String(),'date':DateTime(_billDate.year,_billDate.month,_billDate.day).toIso8601String(),'dueDate':_due?.toIso8601String(),'billPhoto':_billPhoto,'billPhotos':_billPhoto==null?[]:[_billPhoto],'itemPhoto':_itemPhoto,'itemPhotos':_itemPhoto==null?[]:[_itemPhoto],'note':_note.text.trim(),'payments':paid>0?[{'amount':paid,'direction':'Diya','date':now.toIso8601String()}]:[],'createdAt':now.toIso8601String()});if(mounted)Navigator.pop(context);}catch(e){_error('Purchase save nahi hui: $e');}finally{if(mounted)setState(()=>_saving=false);}}
+ Widget _photoRow(String label,bool bill,String? path)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text(label,style:const TextStyle(fontWeight:FontWeight.w700)),Wrap(spacing:8,children:[TextButton.icon(onPressed:()=>_photo(bill,ImageSource.camera),icon:const Icon(Icons.camera_alt),label:const Text('Camera')),TextButton.icon(onPressed:()=>_photo(bill,ImageSource.gallery),icon:const Icon(Icons.photo),label:const Text('Gallery'))]),if(path!=null)Row(children:[mediaThumbnail(path,size:80),IconButton(onPressed:()=>setState(()=>bill?_billPhoto=null:_itemPhoto=null),icon:const Icon(Icons.delete_outline,color:Colors.red))])]);
+ @override Widget build(BuildContext context){final selected=contacts.where((c)=>c['id']==_vendorId).toList();final total=double.tryParse(_total.text)??0,paid=double.tryParse(_paid.text)??0;return Scaffold(appBar:AppBar(title:const Text('Dawai / Khaad Purchase')),body:ListView(padding:const EdgeInsets.all(16),children:[
+ DropdownButtonFormField<String>(value:_category,decoration:const InputDecoration(labelText:'Category'),items:['Dawai','Fertilizer','Beej','Other'].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setState(()=>_category=v??_category)),
+ const SizedBox(height:8),TextField(controller:_item,decoration:const InputDecoration(labelText:'Samaan ka naam (DAP, Urea, dawa etc.)')),
+ Row(children:[Expanded(child:TextField(controller:_qty,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'Quantity'))),const SizedBox(width:8),Expanded(child:DropdownButtonFormField<String>(value:_unit,decoration:const InputDecoration(labelText:'Unit'),items:['Packet','Bottle','Bag','Kg','Litre','Piece','Other'].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setState(()=>_unit=v??_unit))]),
+ OutlinedButton.icon(onPressed:()=>_date(false),icon:const Icon(Icons.calendar_month),label:Text('Bill date: ${dateLabel(_billDate)}')),
+ OutlinedButton.icon(onPressed:_pickVendor,icon:const Icon(Icons.contacts),label:Text(selected.isEmpty?'Phone contact se shop/person':'Selected: ${selected.first['name']}')),
+ if(contacts.isNotEmpty)DropdownButtonFormField<String>(value:_vendorId,decoration:const InputDecoration(labelText:'Saved person/shop'),items:contacts.map((c)=>DropdownMenuItem(value:c['id'].toString(),child:Text((c['name']??'').toString()))).toList(),onChanged:(v)=>setState(()=>_vendorId=v)),
+ TextButton.icon(onPressed:_manualVendor,icon:const Icon(Icons.person_add),label:const Text('Naya dukaan wala save karein')),
+ TextField(controller:_total,keyboardType:const TextInputType.numberWithOptions(decimal:true),onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'Total bill ₹')),
+ TextField(controller:_paid,keyboardType:const TextInputType.numberWithOptions(decimal:true),onChanged:(_)=>setState((){}),decoration:const InputDecoration(labelText:'Abhi diya ₹')),
+ Card(child:ListTile(title:Text('Pending: ₹${(total-paid).clamp(0,double.infinity).toStringAsFixed(0)}'),subtitle:Text(paid>=total?'Paid':'Udhar / pending'))),
+ if(total>paid)OutlinedButton.icon(onPressed:()=>_date(true),icon:const Icon(Icons.event),label:Text(_due==null?'Due date (optional)':'Due: ${dateLabel(_due!)}')),
+ VoiceDictationField(controller:_note,label:'Note optional'),
+ const SizedBox(height:10),_photoRow('Bill ki photo',true,_billPhoto),const SizedBox(height:10),_photoRow('Dawai / samaan ki photo',false,_itemPhoto),
+ const SizedBox(height:16),FilledButton(onPressed:_saving?null:_save,child:Text(_saving?'Saving…':'Save Purchase')),
+ ]));}
+}
+
+class KhetVendorLedgerScreen extends StatefulWidget{const KhetVendorLedgerScreen({required this.vendorId,required this.vendorName,super.key});final String vendorId,vendorName;@override State<KhetVendorLedgerScreen> createState()=>_KhetVendorLedgerScreenState();}
+class _KhetVendorLedgerScreenState extends State<KhetVendorLedgerScreen>{
+ final _storage=StorageBackupService.instance;double _n(dynamic v)=>v is num?v.toDouble():double.tryParse((v??'').toString())??0;
+ List<Map<String,dynamic>> get p=>_storage.records('khet').where((r)=>r['type']=='KHET_PURCHASE'&&r['vendorId']==widget.vendorId).toList();
+ List<Map<String,dynamic>> get pay=>_storage.records('khet').where((r)=>r['type']=='KHET_PURCHASE_PAYMENT'&&r['vendorId']==widget.vendorId).toList();
+ double get balance=>p.fold<double>(0,(s,r)=>s+_n(r['totalAmount'])-_n(r['paidAmount']))-pay.fold<double>(0,(s,r)=>s+_n(r['amount']));
+ Future<void> _addPayment()async{final c=TextEditingController(),note=TextEditingController();DateTime date=DateTime.now();final result=await showDialog<Map<String,dynamic>>(context:context,builder:(ctx)=>StatefulBuilder(builder:(ctx,setD)=>AlertDialog(title:Text('Payment · ${widget.vendorName}'),content:Column(mainAxisSize:MainAxisSize.min,children:[Text('Current balance ₹${balance.toStringAsFixed(0)}'),TextField(controller:c,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'Payment amount ₹')),TextField(controller:note,decoration:const InputDecoration(labelText:'Note')),OutlinedButton(onPressed:()async{final d=await showDatePicker(context:ctx,initialDate:date,firstDate:DateTime(DateTime.now().year-8),lastDate:DateTime(DateTime.now().year+8));if(d!=null)setD(()=>date=d);},child:Text('Date: ${dateLabel(date)}'))]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),FilledButton(onPressed:(){final n=double.tryParse(c.text);if(n!=null&&n>0)Navigator.pop(ctx,{'amount':n,'note':note.text,'date':date});},child:const Text('Save'))])));c.dispose();note.dispose();if(result==null)return;await _storage.addRecord('khet',{'id':DateTime.now().microsecondsSinceEpoch.toString(),'type':'KHET_PURCHASE_PAYMENT','vendorId':widget.vendorId,'vendorName':widget.vendorName,'amount':result['amount'],'date':(result['date'] as DateTime).toIso8601String(),'note':result['note'],'allocationMethod':'OLDEST_BILL_FIRST'});if(mounted)setState((){});}
+ @override Widget build(BuildContext context){final rows=[...p,...pay]..sort((a,b)=>(a['date']??'').toString().compareTo((b['date']??'').toString()));final bought=p.fold<double>(0,(s,r)=>s+_n(r['totalAmount'])),atPurchase=p.fold<double>(0,(s,r)=>s+_n(r['paidAmount'])),later=pay.fold<double>(0,(s,r)=>s+_n(r['amount']));return Scaffold(appBar:AppBar(title:Text('${widget.vendorName} · Khata')),body:Column(children:[Card(margin:const EdgeInsets.all(12),child:Padding(padding:const EdgeInsets.all(12),child:Column(children:[_line('Total purchase',bought),_line('Paid at purchase',atPurchase),_line('Later payments',later),const Divider(),_line(balance>=0?'Pending':'Advance',balance.abs(),bold:true),const Text('Payments adjust the oldest bill first.',style:TextStyle(fontSize:12))]))),Expanded(child:rows.isEmpty?const Center(child:Text('No purchase records')):ListView.builder(itemCount:rows.length,itemBuilder:(ctx,i){final r=rows[i],purchase=r['type']=='KHET_PURCHASE';return ListTile(leading:Icon(purchase?Icons.shopping_bag:Icons.payments),title:Text(purchase?(r['title']??'Purchase').toString():'Payment ₹${_n(r['amount']).toStringAsFixed(0)}'),subtitle:Text('${dateLabel(DateTime.tryParse((r['date']??'').toString())??DateTime.now())}${purchase?' · Bill ₹${_n(r['totalAmount']).toStringAsFixed(0)} · Paid ₹${_n(r['paidAmount']).toStringAsFixed(0)}':''}${(r['note']??'').toString().isEmpty?'':'\n${r['note']}'}');})),]),floatingActionButton:FloatingActionButton.extended(onPressed:_addPayment,icon:const Icon(Icons.payments),label:const Text('Add Payment')));}
+ Widget _line(String label,double value,{bool bold=false})=>Padding(padding:const EdgeInsets.symmetric(vertical:3),child:Row(mainAxisAlignment:MainAxisAlignment.spaceBetween,children:[Text(label,style:TextStyle(fontWeight:bold?FontWeight.w800:null)),Text('₹${value.toStringAsFixed(0)}',style:TextStyle(fontWeight:bold?FontWeight.w800:null,color:bold?(balance>0?Colors.red:Colors.green):null))]));
 }
