@@ -45,6 +45,26 @@ class _HisabScreenState extends State<HisabScreen> {
     return paths.where((path) => File(path).existsSync()).toList();
   }
 
+  String _expensePlotSummary(Map<String, dynamic> row) {
+    final ids = (row['plotIds'] as List? ?? const [])
+        .map((id) => id.toString()).where((id) => id.isNotEmpty).toList();
+    if (ids.isNotEmpty) {
+      final savedLabels = (row['plotLabelsSnapshot'] as List? ?? const [])
+          .map((label) => label.toString()).where((label) => label.isNotEmpty).toList();
+      final labels = savedLabels.isNotEmpty
+          ? savedLabels
+          : _storage.records('plots')
+              .where((plot) => ids.contains(plot['id'].toString()))
+              .map(plotLabel).toList();
+      return 'सामूहिक · ${ids.length} किले${labels.isEmpty ? '' : ': ${labels.join(', ')}'}';
+    }
+    if (row['plotId'] != null) {
+      final label = plotLabelForId(_storage, row['plotId']);
+      return label.isEmpty ? 'एक किले के लिए' : label;
+    }
+    return 'पूरे खेत के लिए';
+  }
+
   List<Map<String, dynamic>> get _filtered {
     return _rows.where((row) {
       final date = DateTime.tryParse(row['date'] as String? ?? '');
@@ -79,6 +99,7 @@ class _HisabScreenState extends State<HisabScreen> {
       'Category: ${row['category'] ?? ''}',
       if ((row['personName'] as String? ?? '').isNotEmpty) 'Person: ${row['personName']}',
       if ((row['title'] as String? ?? '').isNotEmpty) 'Title: ${row['title']}',
+      if (row['entryType'] == 'EXPENSE') 'Killa / Field: ${_expensePlotSummary(row)}',
       if ((row['amount'] as String? ?? '').isNotEmpty) 'Amount: ${row['direction'] == 'PAID' ? '−' : '+'}₹${row['amount']}',
       if (row['category'] == 'Len-Den' || row['category'] == 'Studio') 'Type: $direction',
       if ((row['note'] as String? ?? '').isNotEmpty) 'Note: ${row['note']}',
@@ -210,7 +231,7 @@ class _HisabScreenState extends State<HisabScreen> {
           ),
           if (isExpense)
             Text(
-              'Paid ₹${row['paidAmount'] ?? 0} · Pending ₹${row['balance'] ?? 0}${row['plotId'] == null ? '' : ' · Killa linked'}',
+              'Paid ₹${row['paidAmount'] ?? 0} · Pending ₹${row['balance'] ?? 0} · ${_expensePlotSummary(row)}',
               style: const TextStyle(color: Colors.black54, fontSize: 12),
             ),
           if ((row['note'] as String? ?? '').isNotEmpty) ...[
