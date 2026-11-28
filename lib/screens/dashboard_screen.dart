@@ -425,10 +425,6 @@ class _PersonMonthDetailScreen extends StatelessWidget {
     final expenseTotal = sorted.where((row) =>
       row['entryType'] == 'EXPENSE' || row['type'] == 'KHET_PURCHASE' || row['type'] == 'TRACTOR'
     ).fold<double>(0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['amount'] ?? row['price']));
-    final monthCount = sorted.where((row) {
-      final date = DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString());
-      return date != null && '${date.year}-${date.month.toString().padLeft(2, '0')}' == selectedMonth;
-    }).length;
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
     final status = net > 0.009
         ? '${money.format(net.abs())} लेना बाकी'
