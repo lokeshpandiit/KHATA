@@ -192,5 +192,26 @@ void main() {
       expect(entries.first.sortDate, DateTime(2026, 11, 30, 19));
     });
 
+    test('normalizes legacy literal newline escapes in visible text', () {
+      final entries = HistoryProjection.build(
+        hisabs: [
+          {
+            'id': 'legacy-text',
+            'title': r'Khet\nka kaam',
+            'category': 'Khet',
+            'note': r'Pehli line\nDusri line',
+            'date': '2026-11-28T10:00:00',
+          },
+        ],
+        khet: const [],
+        members: const [],
+        products: const [],
+      );
+
+      expect(entries.single.title, 'Khet\nka kaam');
+      expect(entries.single.subtitle, contains('Pehli line\nDusri line'));
+      expect(entries.single.title, isNot(contains(r'\n')));
+    });
+
   });
 }
