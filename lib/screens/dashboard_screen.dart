@@ -1291,11 +1291,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
             Text('Iske baad baki: ${(remaining - (int.tryParse(minutesController.text) ?? 0)).clamp(0, 999999)} min'),
           ],
           if (status == 'WORK_SETTLEMENT') ...[
-            TextField(
-              controller: noteController,
-              decoration: const InputDecoration(labelText: 'Khet mein kya kaam karwaya? (jaise: buai, nirai, katai)'),
-            ),
-            const Text('Is option se pani ka baki hisab kaam ke badle settle mark hoga.'),
+            const Text('Khet mein kya kaam karwaya, Note mein likhein. Isse baki pani ka hisab kaam ke badle settle mark hoga.'),
           ],
           if (status == 'CASH_PAYMENT') ...[
             TextField(
@@ -1328,7 +1324,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
               },
             ),
           ],
-          TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note')),
+          TextField(controller: noteController, decoration: InputDecoration(labelText: status == 'WORK_SETTLEMENT' ? 'Khet mein kya kaam karwaya?' : 'Note')),
         ])),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -1391,10 +1387,10 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
       0, (sum, e) => sum + _amount(e['minutes']).toInt(),
     );
     final left = (owed - totalExchanged).clamp(0, 999999);
-    final newCashDue = status == 'CASH_PAYMENT' ? _amount(cashDueController.text) : oldCashDue;
-    final newCashPaid = status == 'CASH_PAYMENT'
+    final newCashDue = workSettlementMode ? 0.0 : (status == 'CASH_PAYMENT' ? _amount(cashDueController.text) : oldCashDue);
+    final newCashPaid = workSettlementMode ? 0.0 : (status == 'CASH_PAYMENT'
         ? oldCashPaid + _amount(cashAmountController.text)
-        : oldCashPaid;
+        : oldCashPaid);
     final newCashBalance = (newCashDue - newCashPaid).clamp(0, double.infinity).toDouble();
 
     if (status == 'CASH_PAYMENT') {
