@@ -506,12 +506,15 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                     icon: const Icon(Icons.water_drop_outlined), label: const Text('Add Pani'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: hasActiveCycle ? null : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(
-                      type: 'FASAL',
-                      initialPlotId: widget.plot['id'] as String,
-                      initialSeason: _season,
-                      initialYear: _year,
-                    ))),
+                    onPressed: hasActiveCycle ? null : () async {
+                      await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(
+                        type: 'FASAL',
+                        initialPlotId: widget.plot['id'] as String,
+                        initialSeason: _season,
+                        initialYear: _year,
+                      )));
+                      if (mounted) setState(() => _selectedCropCycleId = null);
+                    },
                     icon: const Icon(Icons.grass_outlined),
                     label: Text(hasActiveCycle ? 'Pehle current fasal ka harvest karein' : 'Nayi Fasal Shuru Karein'),
                   ),
