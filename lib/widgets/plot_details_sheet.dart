@@ -21,7 +21,7 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
   String? _selectedCropCycleId;
 
   DateTime? _date(Map<String, dynamic> row) {
-    for (final key in ['date', 'sowingDate', 'applicationDate']) {
+    for (final key in ['eventDate', 'harvestDate', 'date', 'sowingDate', 'applicationDate']) {
       final value = row[key];
       if (value is String) {
         final parsed = DateTime.tryParse(value);
@@ -37,6 +37,51 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
     return result;
   }
 
+  String _cycleKey(Map<String, dynamic> crop) {
+    final id = crop['cropCycleId']?.toString();
+    if (id != null && id.isNotEmpty) return id;
+    return 'legacy_${crop['id'] ?? 'unknown'}';
+  }
+
+  bool _isCompleted(Map<String, dynamic> crop) =>
+      crop['harvested'] == true || crop['cropCycleStatus'] == 'COMPLETED';
+
+  double _amount(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
+  }
+
+  bool _belongsToCycle(Map<String, dynamic> row, Map<String, dynamic> crop) {
+    if (row['id'] == crop['id']) return true;
+    final rowCycleId = row['cropCycleId']?.toString();
+    if (rowCycleId != null && rowCycleId.isNotEmpty) {
+      return rowCycleId == _cycleKey(crop);
+    }
+
+    // Backward compatibility for records saved before cropCycleId existed.
+    // Attach only unlinked rows inside this crop's sowing-to-harvest window.
+    final sowingDate = DateTime.tryParse(
+      (crop['sowingDate'] ?? crop['date'] ?? '').toString(),
+    );
+    final activityDate = _date(row);
+    if (sowingDate == null || activityDate == null) {
+      return crop['season'] != null &&
+          row['season'] == crop['season'] &&
+          (crop['year'] == null || row['year'] == crop['year']);
+    }
+    final day = DateUtils.dateOnly(activityDate);
+    if (day.isBefore(DateUtils.dateOnly(sowingDate))) return false;
+    final harvestDate = DateTime.tryParse((crop['harvestDate'] ?? '').toString());
+    if (harvestDate != null && day.isAfter(DateUtils.dateOnly(harvestDate))) {
+      return false;
+    }
+    if (crop['season'] != null && row['season'] != null &&
+        row['season'] != crop['season']) return false;
+    if (crop['year'] != null && row['year'] != null &&
+        row['year'] != crop['year']) return false;
+    return true;
+  }
+
   Future<void> _markHarvested(Map<String, dynamic> crop) async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -46,6 +91,16 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
       lastDate: DateTime(now.year + 8),
     );
     if (picked == null || !mounted) return;
+    final sowingDate = DateTime.tryParse(
+      (crop['sowingDate'] ?? crop['date'] ?? '').toString(),
+    );
+    if (sowingDate != null &&
+        DateUtils.dateOnly(picked).isBefore(DateUtils.dateOnly(sowingDate))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('कटाई की तारीख, बुवाई की तारीख से पहले नहीं हो सकती।')),
+      );
+      return;
+    }
     final futureHarvest = DateUtils.dateOnly(picked).isAfter(
       DateUtils.dateOnly(now),
     );
@@ -90,6 +145,14 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
         title: Text(date == null ? 'Paani details' : DateFormat('dd MMM yyyy').format(date)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           _line('Paani', formatMinutes(minutes)),
+          if (row['ownMinutes'] is num)
+            _line('Apni baari / apna pani', formatMinutes((row['ownMinutes'] as num).toInt())),
+          if (row['borrowedMinutes'] is num && (row['borrowedMinutes'] as num).toInt() > 0)
+            _line('Dusre se liya pani', formatMinutes((row['borrowedMinutes'] as num).toInt())),
+          if (row['borrowedNaharMinutes'] is num && (row['borrowedNaharMinutes'] as num).toInt() > 0)
+            _line('Nahar se liya', formatMinutes((row['borrowedNaharMinutes'] as num).toInt())),
+          if (row['borrowedKuaMinutes'] is num && (row['borrowedKuaMinutes'] as num).toInt() > 0)
+            _line('Kua se liya', formatMinutes((row['borrowedKuaMinutes'] as num).toInt())),
           _line('Source', source),
           if (direction.isNotEmpty) _line('Apna / liya / diya', direction),
           if (contact.isNotEmpty) _line('Kis se', contact),
@@ -163,16 +226,19 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
       builder: (context, _, __) {
         final plotRecords = storage.records('khet').where((row) => row['plotId'] == widget.plot['id']).toList();
         final cropCycles = _latest(plotRecords.where((row) => row['type'] == 'FASAL').toList());
-        final selectedMatches = cropCycles.where((row) => row['cropCycleId'] == _selectedCropCycleId).toList();
-        final activeMatches = cropCycles.where((row) => row['harvested'] != true).toList();
+        final selectedMatches = cropCycles.where((row) => _cycleKey(row) == _selectedCropCycleId).toList();
+        final activeMatches = cropCycles.where((row) => !_isCompleted(row)).toList();
         final selectedCycle = selectedMatches.isNotEmpty ? selectedMatches.first :
             activeMatches.isNotEmpty ? activeMatches.first :
             cropCycles.isNotEmpty ? cropCycles.first : null;
-        final selectedCycleId = selectedCycle?['cropCycleId']?.toString();
-        if (_selectedCropCycleId == null && selectedCycleId != null) _selectedCropCycleId = selectedCycleId;
+        final selectedCycleId = selectedCycle == null ? null : _cycleKey(selectedCycle);
+        if (_selectedCropCycleId == null && selectedCycleId != null) {
+          _selectedCropCycleId = selectedCycleId;
+        }
         final entries = _latest(plotRecords.where((row) {
-          if (selectedCycleId != null && row['cropCycleId'] != null) return row['cropCycleId'] == selectedCycleId;
-          return row['season'] == _season && row['year'] == _year;
+          if (selectedCycle != null) return _belongsToCycle(row, selectedCycle);
+          return row['cropCycleId'] == null &&
+              row['season'] == _season && row['year'] == _year;
         }).toList());
         final pani = entries.where((row) => row['type'] == 'PANI').toList();
         final crops = entries.where((row) => row['type'] == 'FASAL').toList();
@@ -180,15 +246,62 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
         final dawai = entries.where((row) => row['type'] == 'DAWAI').toList();
         final khaad = entries.where((row) => row['type'] == 'KHAD').toList();
         final latestPani = pani.isEmpty ? null : pani.first;
-        final activeCrops = crops.where((row) => row['harvested'] != true).toList();
-        final latestCrop = activeCrops.isEmpty ? null : activeCrops.first;
+        final latestCrop = selectedCycle != null && !_isCompleted(selectedCycle)
+            ? selectedCycle
+            : null;
+        final selectedCompleted = selectedCycle != null && _isCompleted(selectedCycle);
+        final hasActiveCycle = activeMatches.isNotEmpty;
         final totalKyaris = (widget.plot['totalKyaris'] as num?)?.toInt() ?? 0;
         final wetKyaris = (latestPani?['wetKyaris'] as num?)?.toInt() ?? 0;
         final remainingKyaris = latestPani == null
             ? totalKyaris
             : ((latestPani['remainingKyaris'] as num?)?.toInt() ?? (totalKyaris - wetKyaris).clamp(0, totalKyaris));
         final totalMinutes = pani.fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
-        final cropName = latestCrop == null ? 'Fasal record nahi hai' : (latestCrop['cropName'] ?? latestCrop['title'] ?? 'Fasal').toString() + (latestCrop['harvested'] == true ? ' (Kat chuki)' : '');
+        final ownMinutes = pani.fold<int>(0, (sum, row) {
+          final total = (row['minutes'] as num?)?.toInt() ?? 0;
+          final borrowed = (row['borrowedMinutes'] as num?)?.toInt() ?? 0;
+          return sum + ((row['ownMinutes'] as num?)?.toInt() ?? (total - borrowed).clamp(0, total));
+        });
+        final borrowedMinutes = pani.fold<int>(0, (sum, row) =>
+            sum + ((row['borrowedMinutes'] as num?)?.toInt() ?? 0));
+        final borrowedNahar = pani.fold<int>(0, (sum, row) =>
+            sum + ((row['borrowedNaharMinutes'] as num?)?.toInt() ?? 0));
+        final borrowedKua = pani.fold<int>(0, (sum, row) =>
+            sum + ((row['borrowedKuaMinutes'] as num?)?.toInt() ?? 0));
+        final cropName = selectedCycle == null
+            ? 'Fasal record nahi hai'
+            : (selectedCycle['cropName'] ?? selectedCycle['title'] ?? 'Fasal').toString() +
+                (_isCompleted(selectedCycle) ? ' (Kat chuki)' : ' (Current)');
+        final expenseRows = entries.where((row) =>
+            ['FASAL', 'KHAD', 'DAWAI', 'HARA_BEEJ', 'OTHER'].contains(row['type']) &&
+            _amount(row['price']) > 0).toList();
+        final totalCropExpenses = expenseRows.fold<double>(
+            0, (sum, row) => sum + _amount(row['price']));
+        final expenseByType = <String, double>{};
+        for (final row in expenseRows) {
+          final type = (row['type'] ?? 'OTHER').toString();
+          expenseByType[type] = (expenseByType[type] ?? 0) + _amount(row['price']);
+        }
+        final timelineRows = <Map<String, dynamic>>[...entries];
+        if (selectedCycle != null && selectedCycle['harvestDate'] is String &&
+            (selectedCycle['harvestDate'] as String).isNotEmpty) {
+          timelineRows.add({
+            'id': 'harvest_${_cycleKey(selectedCycle)}',
+            'type': 'HARVEST_EVENT',
+            'eventDate': selectedCycle['harvestDate'],
+            'title': 'Fasal katayi poori',
+          });
+        } else if (selectedCycle != null && selectedCycle['plannedHarvestDate'] is String &&
+            (selectedCycle['plannedHarvestDate'] as String).isNotEmpty) {
+          timelineRows.add({
+            'id': 'planned_harvest_${_cycleKey(selectedCycle)}',
+            'type': 'HARVEST_PLANNED',
+            'eventDate': selectedCycle['plannedHarvestDate'],
+            'title': 'Planned fasal katayi',
+          });
+        }
+        timelineRows.sort((a, b) =>
+            (_date(a) ?? DateTime(0)).compareTo(_date(b) ?? DateTime(0)));
 
         return SafeArea(
           child: Padding(
@@ -212,7 +325,7 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                     final date = _date(crop);
                     final status = crop['harvested'] == true ? ' · Complete' : ' · Current';
                     return DropdownMenuItem<String>(
-                      value: crop['cropCycleId']?.toString(),
+                      value: _cycleKey(crop),
                       child: Text(cropTitle + (date == null ? '' : ' · ${DateFormat('dd MMM yyyy').format(date)}') + status,
                         overflow: TextOverflow.ellipsis),
                     );
@@ -233,14 +346,88 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                 child: ListView(children: [
                   _section('Khet summary', [
                     _line('Total kyari', totalKyaris == 0 ? 'Map Edit mein set karein' : totalKyaris.toString()),
-                    _line('Current fasal', cropName),
-                    _line('Paani entries', pani.length.toString() + ' baar'),
+                    _line('Selected crop', cropName),
+                    if (selectedCycle != null)
+                      _line('Buwai date', _date(selectedCycle) == null
+                          ? 'Date nahi'
+                          : DateFormat('dd MMM yyyy').format(_date(selectedCycle)!)),
+                    if (selectedCycle != null)
+                      _line('Cycle status', selectedCompleted ? 'Complete / Locked' : 'Active'),
+                    _line('Paani entries', '${pani.length} baar'),
                     _line('Total paani time', formatMinutes(totalMinutes)),
+                    _line('Apna pani', formatMinutes(ownMinutes)),
+                    _line('Dusre se liya pani', formatMinutes(borrowedMinutes)),
+                    if (borrowedNahar > 0) _line('Nahar se liya', formatMinutes(borrowedNahar)),
+                    if (borrowedKua > 0) _line('Kua se liya', formatMinutes(borrowedKua)),
                     if (latestPani != null) ...[
                       _line('Is baar bheegi kyari', wetKyaris.toString()),
                       _line('Abhi baaki kyari', remainingKyaris.toString()),
                     ],
                   ]),
+                  _section('Crop-wise expenses', expenseRows.isEmpty
+                    ? [const Text('Is crop cycle ka koi kharcha record nahi hai.')]
+                    : [
+                        _line('Total crop expense', '₹${totalCropExpenses.toStringAsFixed(0)}'),
+                        ...expenseByType.entries.map((entry) => _line(
+                          switch (entry.key) {
+                            'FASAL' => 'Buwai / beej',
+                            'KHAD' => 'Khaad',
+                            'DAWAI' => 'Dawai / spray',
+                            'HARA_BEEJ' => 'Hara beej',
+                            _ => 'Other',
+                          },
+                          '₹${entry.value.toStringAsFixed(0)}',
+                        )),
+                      ]),
+                  _section('Crop timeline', timelineRows.isEmpty
+                    ? [const Text('Is crop cycle ki timeline abhi khaali hai.')]
+                    : timelineRows.map((row) {
+                        final type = (row['type'] ?? '').toString();
+                        final date = _date(row);
+                        final title = switch (type) {
+                          'FASAL' => 'Buwai · ${row['cropName'] ?? row['title'] ?? 'Fasal'}',
+                          'PANI' => 'Paani diya',
+                          'KHAD' => 'Khaad dali',
+                          'DAWAI' => 'Dawai / spray',
+                          'HARA_BEEJ' => 'Hara beej / chara',
+                          'HARVEST_EVENT' => 'Fasal katayi poori',
+                          'HARVEST_PLANNED' => 'Planned fasal katayi',
+                          _ => type.isEmpty ? 'Activity' : type,
+                        };
+                        final subtitle = switch (type) {
+                          'PANI' => [
+                              formatMinutes((row['minutes'] as num?)?.toInt() ?? 0),
+                              (row['source'] ?? 'Paani').toString(),
+                              if ((row['borrowedMinutes'] as num?)?.toInt() case final borrowed? when borrowed > 0)
+                                'Liye: ${formatMinutes(borrowed)}',
+                            ].join(' · '),
+                          'KHAD' || 'DAWAI' || 'HARA_BEEJ' || 'FASAL' =>
+                            [
+                              (row['title'] ?? row['purpose'] ?? row['seedName'] ?? '').toString(),
+                              if (_amount(row['price']) > 0) '₹${_amount(row['price']).toStringAsFixed(0)}',
+                              if ((row['note'] ?? '').toString().trim().isNotEmpty) row['note'].toString(),
+                            ].where((part) => part.isNotEmpty).join(' · '),
+                          _ => '',
+                        };
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          leading: Icon(switch (type) {
+                            'PANI' => Icons.water_drop_outlined,
+                            'KHAD' => Icons.science_outlined,
+                            'DAWAI' => Icons.medication_outlined,
+                            'FASAL' => Icons.grass_outlined,
+                            'HARVEST_EVENT' => Icons.agriculture_outlined,
+                            'HARVEST_PLANNED' => Icons.event_outlined,
+                            _ => Icons.history,
+                          }),
+                          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                          subtitle: Text([
+                            if (date != null) DateFormat('dd MMM yyyy').format(date),
+                            if (subtitle.isNotEmpty) subtitle,
+                          ].join(' · ')),
+                        );
+                      }).toList()),
                   _section('Fasal history', crops.isEmpty
                     ? [const Text('Abhi fasal ki entry nahi hai.')]
                     : crops.map((row) => Column(
@@ -315,28 +502,29 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
               if (widget.plot['isMine'] == true)
                 Wrap(spacing: 8, runSpacing: 8, children: [
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddPaniScreen(initialPlotId: widget.plot['id'] as String))),
+                    onPressed: selectedCompleted ? null : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddPaniScreen(initialPlotId: widget.plot['id'] as String))),
                     icon: const Icon(Icons.water_drop_outlined), label: const Text('Add Pani'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(
+                    onPressed: hasActiveCycle ? null : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(
                       type: 'FASAL',
                       initialPlotId: widget.plot['id'] as String,
                       initialSeason: _season,
                       initialYear: _year,
                     ))),
-                    icon: const Icon(Icons.grass_outlined), label: const Text('Nayi Fasal Shuru Karein'),
+                    icon: const Icon(Icons.grass_outlined),
+                    label: Text(hasActiveCycle ? 'Pehle current fasal ka harvest karein' : 'Nayi Fasal Shuru Karein'),
                   ),
                   OutlinedButton.icon(
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'HARA_BEEJ', initialPlotId: widget.plot['id'] as String))),
                     icon: const Icon(Icons.pets_outlined), label: const Text('Add Hara Beej'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'DAWAI', initialPlotId: widget.plot['id'] as String, initialSeason: _season, initialYear: _year))),
+                    onPressed: selectedCompleted ? null : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'DAWAI', initialPlotId: widget.plot['id'] as String, initialSeason: _season, initialYear: _year))),
                     icon: const Icon(Icons.medication_outlined), label: const Text('Add Dawai'),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'KHAD', initialPlotId: widget.plot['id'] as String, initialSeason: _season, initialYear: _year))),
+                    onPressed: selectedCompleted ? null : () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AddKhetItemScreen(type: 'KHAD', initialPlotId: widget.plot['id'] as String, initialSeason: _season, initialYear: _year))),
                     icon: const Icon(Icons.science_outlined), label: const Text('Add Khaad'),
                   ),
                   OutlinedButton.icon(
