@@ -95,7 +95,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return date != null && _monthKey(date) == _selectedMonth;
     }
     final allPersonLedgerRows = <Map<String, dynamic>>[
-      ...hisabs.where((row) => (row['personName'] ?? '').toString().trim().isNotEmpty),
+      ...hisabs.where((row) => (row['personName'] ?? '').toString().trim().isNotEmpty).map((row) => <String, dynamic>{...row, 'ledgerSource': 'HISAB'}),
       ...khet.where((row) => const ['TRACTOR', 'KHET_PURCHASE', 'KHET_PURCHASE_PAYMENT'].contains(row['type']))
           .map((row) {
             final person = row['type'] == 'TRACTOR'
@@ -416,7 +416,7 @@ class _MonthPersonLedgerScreen extends StatelessWidget {
   }
 }
 
-class _PersonMonthDetailScreen extends StatelessWidget {
+class _PersonMonthDetailScreen extends StatefulWidget {
   const _PersonMonthDetailScreen({
     required this.name,
     required this.rows,
@@ -428,6 +428,24 @@ class _PersonMonthDetailScreen extends StatelessWidget {
   final List<Map<String, dynamic>> rows;
   final String monthTitle;
   final String selectedMonth;
+
+  @override
+  State<_PersonMonthDetailScreen> createState() => _PersonMonthDetailScreenState();
+}
+
+class _PersonMonthDetailScreenState extends State<_PersonMonthDetailScreen> {
+  late List<Map<String, dynamic>> _rows;
+
+  String get name => widget.name;
+  List<Map<String, dynamic>> get rows => _rows;
+  String get monthTitle => widget.monthTitle;
+  String get selectedMonth => widget.selectedMonth;
+
+  @override
+  void initState() {
+    super.initState();
+    _rows = List<Map<String, dynamic>>.from(widget.rows);
+  }
 
   double _amount(dynamic value) => value is num
       ? value.toDouble()
@@ -443,7 +461,261 @@ class _PersonMonthDetailScreen extends StatelessWidget {
     return row['direction'] == 'PAID' ? _amount(row['amount']) : -_amount(row['amount']);
   }
 
+  String _personForRow(Map<String, dynamic> row) =>
+      (row['personName'] ?? row['vendorName'] ?? row['customerName'] ?? row['ownerName'] ?? row['contact'] ?? '').toString().trim();
+
+  Future<void> _refreshPersonRows() async {
+    final storage = StorageBackupService.instance;
+    final target = name.toLowerCase();
+    final hisabs = storage.records('hisabs').where((row) =>
+      _personForRow(row).toLowerCase() == target
+    ).map((row) => <String, dynamic>{...row, 'ledgerSource': 'HISAB'}).toList();
+    final khet = storage.records('khet').where((row) {
+      if (!const ['TRACTOR', 'KHET_PURCHASE', 'KHET_PURCHASE_PAYMENT', 'KUA'].contains(row['type'])) return false;
+      return _personForRow(row).toLowerCase() == target;
+    }).map((row) => <String, dynamic>{
+      ...row,
+      'personName': _personForRow(row),
+      'ledgerSource': 'KHET',
+    }).toList();
+    if (mounted) setState(() => _rows = [...hisabs, ...khet]);
+  }
+
+  Future<void> _recordPersonPayment() async {
+    final beforeNet = rows.fold<double>(0, (sum, row) => sum + _delta(row));
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+    String direction = beforeNet < -0.009 ? 'Diya' : 'Liya';
+    DateTime paymentDate = DateTime.now();
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
+        title: Text('Payment · $name'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(
+            beforeNet > 0.009
+                ? 'Pehle lena baki: ₹${beforeNet.toStringAsFixed(0)}'
+                : beforeNet < -0.009
+                    ? 'Pehle dena baki: ₹${beforeNet.abs().toStringAsFixed(0)}'
+                    : 'Purana hisab barabar hai',
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          DropdownButtonFormField<String>(
+            value: direction,
+            decoration: const InputDecoration(labelText: 'Payment type'),
+            items: const [
+              DropdownMenuItem(value: 'Diya', child: Text('💸 Humne paise diye')),
+              DropdownMenuItem(value: 'Liya', child: Text('💰 Humne paise liye')),
+            ],
+            onChanged: (value) => setDialog(() => direction = value ?? direction),
+          ),
+          TextField(
+            controller: amountController,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Kitne rupaye?'),
+            onChanged: (_) => setDialog(() {}),
+          ),
+          Builder(builder: (context) {
+            final amount = _amount(amountController.text);
+            final after = beforeNet + (direction == 'Diya' ? amount : -amount);
+            final label = after > 0.009
+                ? 'Ab ₹${after.toStringAsFixed(0)} lena baki'
+                : after < -0.009
+                    ? 'Ab ₹${after.abs().toStringAsFixed(0)} dena baki'
+                    : 'Hisab ₹0 · Clear';
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Align(alignment: Alignment.centerLeft, child: Text(label)),
+            );
+          }),
+          TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note (optional)')),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.calendar_today),
+            label: Text('Date: ${DateFormat('dd MMM yyyy').format(paymentDate)}'),
+            onPressed: () async {
+              final picked = await showDatePicker(
+                context: ctx,
+                initialDate: paymentDate,
+                firstDate: DateTime(2000),
+                lastDate: DateTime.now().add(const Duration(days: 3650)),
+              );
+              if (picked != null) setDialog(() => paymentDate = picked);
+            },
+          ),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              if (_amount(amountController.text) <= 0) {
+                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Sahi amount bharein')));
+                return;
+              }
+              Navigator.pop(ctx, {
+                'amount': _amount(amountController.text),
+                'direction': direction,
+                'date': paymentDate,
+                'note': noteController.text.trim(),
+              });
+            },
+            child: const Text('Save payment'),
+          ),
+        ],
+      )),
+    );
+    amountController.dispose();
+    noteController.dispose();
+    if (result == null) return;
+
+    final amount = (result['amount'] as num).toDouble();
+    direction = result['direction'] as String;
+    final date = (result['date'] as DateTime).toIso8601String();
+    final note = (result['note'] ?? '').toString();
+    final storage = StorageBackupService.instance;
+    var remaining = amount;
+    var allocated = 0.0;
+
+    if (direction == 'Diya') {
+      // Allocate money given to unpaid Khet/tractor bills, oldest first.
+      final debts = [...rows.where((row) =>
+        row['entryType'] == 'EXPENSE' || row['type'] == 'TRACTOR'
+      )]..sort((a, b) =>
+        (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
+      for (final debt in debts) {
+        if (remaining <= 0.009) break;
+        final table = debt['ledgerSource'] == 'HISAB' || debt['entryType'] == 'EXPENSE' ? 'hisabs' : 'khet';
+        final source = storage.records(table).where((row) => row['id']?.toString() == debt['id']?.toString()).toList();
+        if (source.isEmpty) continue;
+        final original = source.first;
+        final total = _amount(original['totalAmount'] ?? original['amount'] ?? original['price']);
+        final oldPaid = _amount(original['paidAmount']);
+        final due = (total - oldPaid).clamp(0, double.infinity).toDouble();
+        if (due <= 0.009) continue;
+        final take = remaining < due ? remaining : due;
+        final after = (due - take).clamp(0, double.infinity).toDouble();
+        final history = (original['payments'] as List? ?? const [])
+            .whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList()
+          ..add({
+            'amount': take,
+            'direction': 'Diya',
+            'date': date,
+            'note': note,
+            'balanceBefore': due,
+            'balanceAfter': after,
+          });
+        final updated = Map<String, dynamic>.from(original)
+          ..['paidAmount'] = oldPaid + take
+          ..['balance'] = after
+          ..['payments'] = history
+          ..['status'] = after <= 0.009 ? 'PAID' : 'PARTIAL'
+          ..['updatedAt'] = DateTime.now().toIso8601String();
+        await storage.updateRecord(table, original['id'].toString(), updated);
+        remaining -= take;
+        allocated += take;
+      }
+
+      // Vendor bills use their own payment records so their purchase ledger
+      // and Pending screen remain in sync.
+      final vendorIds = rows.where((row) => row['type'] == 'KHET_PURCHASE')
+          .map((row) => row['vendorId']).where((id) => id != null).toSet();
+      for (final vendorId in vendorIds) {
+        if (remaining <= 0.009) break;
+        final vendorBills = storage.records('khet').where((row) =>
+          row['type'] == 'KHET_PURCHASE' && row['vendorId'] == vendorId
+        ).toList();
+        final vendorPayments = storage.records('khet').where((row) =>
+          row['type'] == 'KHET_PURCHASE_PAYMENT' && row['vendorId'] == vendorId
+        ).fold<double>(0, (sum, row) => sum + _amount(row['amount']));
+        final vendorDue = (vendorBills.fold<double>(0, (sum, row) =>
+          sum + _amount(row['totalAmount']) - _amount(row['paidAmount'])) - vendorPayments)
+          .clamp(0, double.infinity).toDouble();
+        if (vendorDue <= 0.009) continue;
+        final take = remaining < vendorDue ? remaining : vendorDue;
+        await storage.addRecord('khet', {
+          'id': DateTime.now().microsecondsSinceEpoch.toString(),
+          'type': 'KHET_PURCHASE_PAYMENT',
+          'vendorId': vendorId,
+          'vendorName': vendorBills.first['vendorName'] ?? name,
+          'amount': take,
+          'direction': 'Diya',
+          'date': date,
+          'note': note,
+          'allocationMethod': 'OLDEST_BILL_FIRST',
+          'balanceBefore': vendorDue,
+          'balanceAfter': (vendorDue - take).clamp(0, double.infinity),
+        });
+        remaining -= take;
+        allocated += take;
+      }
+    } else {
+      // Money received for Kua rent is allocated to the oldest unpaid Kua bill.
+      final kuaRows = [...rows.where((row) => row['type'] == 'KUA')]
+        ..sort((a, b) => (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
+      for (final kua in kuaRows) {
+        if (remaining <= 0.009) break;
+        final source = storage.records('khet').where((row) =>
+          row['id']?.toString() == kua['id']?.toString() && row['type'] == 'KUA'
+        ).toList();
+        if (source.isEmpty) continue;
+        final original = source.first;
+        final total = _amount(original['cashAmount']);
+        final oldPaid = _amount(original['cashPaid']);
+        final due = (total - oldPaid).clamp(0, double.infinity).toDouble();
+        if (due <= 0.009) continue;
+        final take = remaining < due ? remaining : due;
+        final after = (due - take).clamp(0, double.infinity).toDouble();
+        final history = (original['payments'] as List? ?? const [])
+            .whereType<Map>().map((entry) => Map<String, dynamic>.from(entry)).toList()
+          ..add({
+            'amount': take,
+            'direction': 'Liya',
+            'date': date,
+            'note': note,
+            'balanceBefore': due,
+            'balanceAfter': after,
+          });
+        final updated = Map<String, dynamic>.from(original)
+          ..['cashPaid'] = oldPaid + take
+          ..['cashBalance'] = after
+          ..['cashStatus'] = after <= 0.009 ? 'PAID' : 'PARTIAL'
+          ..['payments'] = history
+          ..['updatedAt'] = DateTime.now().toIso8601String();
+        await storage.updateRecord('khet', original['id'].toString(), updated);
+        remaining -= take;
+        allocated += take;
+      }
+    }
+
+    // Any amount not assigned to a specific bill is retained as a person
+    // account transaction (advance/settlement) instead of being discarded.
+    if (remaining > 0.009 || allocated <= 0.009) {
+      final isKhetPerson = rows.any((row) =>
+        row['category'] == 'Khet' || row['type'] == 'TRACTOR' ||
+        row['type'] == 'KHET_PURCHASE' || row['type'] == 'KUA'
+      );
+      final afterNet = beforeNet + (direction == 'Diya' ? amount : -amount);
+      await storage.addRecord('hisabs', {
+        'id': DateTime.now().microsecondsSinceEpoch.toString(),
+        'category': isKhetPerson ? 'Khet' : 'Len-Den',
+        'title': direction == 'Diya' ? 'Person payment · Paise diye' : 'Person payment · Paise liye',
+        'amount': (remaining > 0.009 ? remaining : amount).toString(),
+        'direction': direction == 'Diya' ? 'PAID' : 'RECEIVED',
+        'entryType': 'PAYMENT',
+        'paymentKind': 'PERSON_PAYMENT',
+        'balanceBefore': beforeNet,
+        'balanceAfter': afterNet,
+        'personName': name,
+        'personPhone': rows.map((row) => row['personPhone'] ?? row['customerPhone'] ?? row['contactPhone']).where((v) => v != null && v.toString().trim().isNotEmpty).cast<String?>().firstWhere((v) => true, orElse: () => null),
+        'date': date,
+        'note': note,
+      });
+    }
+    await _refreshPersonRows();
+  }
+
   String _title(Map<String, dynamic> row) {
+    if (row['paymentKind'] == 'PERSON_PAYMENT') return row['direction'] == 'PAID' ? 'आपने पैसे दिए' : 'आपको पैसे मिले';
     if (row['entryType'] == 'EXPENSE') return '${row['expenseCategory'] ?? 'Khet'} · ${row['title'] ?? 'Kharcha'}';
     if (row['type'] == 'KHET_PURCHASE') return 'खरीद · ${row['title'] ?? 'Samaan'}';
     if (row['type'] == 'KHET_PURCHASE_PAYMENT') return 'दुकानदार को भुगतान';
@@ -478,6 +750,9 @@ class _PersonMonthDetailScreen extends StatelessWidget {
       if (row['balanceBefore'] != null || row['balanceAfter'] != null) parts.add('Pehle baki ${money.format(_amount(row['balanceBefore']))} · baad mein ${money.format(_amount(row['balanceAfter']))}');
     } else {
       parts.add('Amount ${money.format(_amount(row['amount']))}');
+      if (row['paymentKind'] == 'PERSON_PAYMENT') {
+        parts.add('Pehle baki ${money.format(_amount(row['balanceBefore']).abs())} · Baad mein baki ${money.format(_amount(row['balanceAfter']).abs())}');
+      }
     }
     final note = (row['note'] ?? '').toString().trim();
     if (note.isNotEmpty) parts.add(note);
@@ -512,7 +787,7 @@ class _PersonMonthDetailScreen extends StatelessWidget {
             : 'हिसाब बराबर ₹0';
 
     return Scaffold(
-      appBar: AppBar(title: Text(name, overflow: TextOverflow.ellipsis)),
+      appBar: AppBar(title: Text(name, overflow: TextOverflow.ellipsis), actions: [IconButton(tooltip: 'Payment add karein', onPressed: _recordPersonPayment, icon: const Icon(Icons.add_card))]),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         Card(
           child: Padding(
@@ -558,6 +833,7 @@ class _PersonMonthDetailScreen extends StatelessWidget {
           ));
         }),
       ]),
+      floatingActionButton: FloatingActionButton.extended(onPressed: _recordPersonPayment, icon: const Icon(Icons.payments), label: const Text('Add Payment')),
     );
   }
 }
