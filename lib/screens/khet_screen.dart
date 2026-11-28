@@ -2266,7 +2266,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
         'billPhoto': _photos.isEmpty ? null : _photos.first,
         'billPhotos': _photos,
         'note': _note.text.trim(),
-        'payments': paid > 0 ? [{'amount': paid, 'direction': 'Diya', 'date': now.toIso8601String()}] : <Map<String, dynamic>>[],
+        'payments': paid > 0 ? [{'amount': paid, 'direction': 'Diya', 'date': now.toIso8601String(), 'balanceBefore': total, 'balanceAfter': balance}] : <Map<String, dynamic>>[],
         'date': now.toIso8601String(),
       });
       if (mounted) Navigator.pop(context);
@@ -2461,7 +2461,7 @@ class _KhetPurchaseScreenState extends State<KhetPurchaseScreen> {
         'billPhotos': _billPhoto == null ? [] : [_billPhoto],
         'itemPhoto': _itemPhoto, 'itemPhotos': _itemPhoto == null ? [] : [_itemPhoto],
         'note': _note.text.trim(),
-        'payments': paid > 0 ? [{'amount': paid, 'direction': 'Diya', 'date': now.toIso8601String()}] : [],
+        'payments': paid > 0 ? [{'amount': paid, 'direction': 'Diya', 'date': now.toIso8601String(), 'balanceBefore': total, 'balanceAfter': balance}] : [],
         'createdAt': now.toIso8601String()
       });
       if (mounted) Navigator.pop(context);
