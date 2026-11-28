@@ -717,7 +717,7 @@ class _PersonMonthDetailScreenState extends State<_PersonMonthDetailScreen> {
         'direction': direction == 'Diya' ? 'PAID' : 'RECEIVED',
         'entryType': 'PAYMENT',
         'paymentKind': 'PERSON_PAYMENT',
-        'balanceBefore': beforeNet,
+        'balanceBefore': beforeNet + (direction == 'Diya' ? allocated : -allocated),
         'balanceAfter': afterNet,
         'personName': name,
         'personPhone': rows.map((row) => row['personPhone'] ?? row['customerPhone'] ?? row['contactPhone']).where((v) => v != null && v.toString().trim().isNotEmpty).cast<String?>().firstWhere((v) => true, orElse: () => null),
