@@ -746,7 +746,7 @@ class _PersonMonthDetailScreenState extends State<_PersonMonthDetailScreen> {
       final paid = _amount(row['paidAmount']);
       parts.add('Total ${money.format(total)} · Paid ${money.format(paid)} · Pending ${money.format((total - paid).clamp(0, double.infinity))}');
       final history = (row['payments'] as List? ?? const []).whereType<Map>().toList();
-      if (history.isNotEmpty) parts.add('Payment history: ${history.map((p) { final dt=DateTime.tryParse((p['date']??'').toString()); return '${dt==null?'':DateFormat('dd MMM yyyy').format(dt)} ${money.format(_amount(p['amount']))} · baki ${p['balanceAfter'] == null ? '' : money.format(_amount(p['balanceAfter']))}'; }).join(' → ')}');
+      if (history.isNotEmpty) parts.add('Payment history: ${history.map((p) { final dt=DateTime.tryParse((p['date']??'').toString()); final before=p['balanceBefore']==null?'':'pehle ${money.format(_amount(p['balanceBefore']))}'; final after=p['balanceAfter']==null?'':'baad mein ${money.format(_amount(p['balanceAfter']))}'; return '${dt==null?'':DateFormat('dd MMM yyyy').format(dt)} ${p['direction'] ?? 'Diya'} ${money.format(_amount(p['amount']))} · $before · $after'; }).join(' → ')}');
       final plot = plotLabelForId(StorageBackupService.instance, row['plotId']);
       if (plot.isNotEmpty) parts.add(plot);
       final category = row['expenseCategory'] ?? row['purchaseCategory'];
@@ -756,9 +756,9 @@ class _PersonMonthDetailScreenState extends State<_PersonMonthDetailScreen> {
       final paid = _amount(row['cashPaid']);
       parts.add('Cash/Rent ${money.format(total)} · Mila ${money.format(paid)} · Baki ${money.format((total - paid).clamp(0, double.infinity))}');
       final history = (row['payments'] as List? ?? const []).whereType<Map>().toList();
-      if (history.isNotEmpty) parts.add('Payment history: ${history.map((p) { final dt = DateTime.tryParse((p['date'] ?? '').toString()); return '${dt == null ? '' : DateFormat('dd MMM yyyy').format(dt)} ${money.format(_amount(p['amount']))} · baki ${p['balanceAfter'] == null ? '' : money.format(_amount(p['balanceAfter']))}'; }).join(' → ')}');
+      if (history.isNotEmpty) parts.add('Payment history: ${history.map((p) { final dt = DateTime.tryParse((p['date'] ?? '').toString()); return '${dt == null ? '' : DateFormat('dd MMM yyyy').format(dt)} ${p['direction'] ?? ''} ${money.format(_amount(p['amount']))} · pehle ${money.format(_amount(p['balanceBefore']))} · baad mein ${money.format(_amount(p['balanceAfter']))}'; }).join(' → ')}');
     } else if (row['type'] == 'KHET_PURCHASE_PAYMENT') {
-      parts.add('Payment ${money.format(_amount(row['amount']))}');
+      parts.add('${row['direction'] == 'Liya' ? 'Refund received' : 'Dukandar ko payment'} ${money.format(_amount(row['amount']).abs())}');
       if (row['balanceBefore'] != null || row['balanceAfter'] != null) parts.add('Pehle baki ${money.format(_amount(row['balanceBefore']))} · baad mein ${money.format(_amount(row['balanceAfter']))}');
     } else {
       parts.add('Amount ${money.format(_amount(row['amount']))}');
@@ -1733,7 +1733,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
             final source = (row['borrowedSource'] ?? row['source'] ?? 'Pani').toString();
             return Card(child: ListTile(
               title: Text('${row['type'] == 'KUA' ? (row['contact'] ?? 'Person') : (row['borrowedContact'] ?? row['contact'] ?? 'Person')} · ${row['type'] == 'KUA' ? 'Kua: ${row['wellSelection'] ?? 'Solar'}' : source}'),
-              subtitle: Text('Udhaar: $mins min · Mila: $exchanged min · Baki: $remaining min\n${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}\n${(row['waterExchangeHistory'] as List? ?? const []).map((e) { final dt=DateTime.tryParse((e['date']??'').toString()); return '${dt==null?'':DateFormat('dd MMM yyyy').format(dt)}: ${e['minutes']} min liya · baki ${e['balanceAfter'] ?? ''} min'; }).join('\n')}\n${row['note'] ?? ''}'),
+              subtitle: Text('Udhaar: $mins min · Mila: $exchanged min · Baki: $remaining min\n${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}\n${(row['waterExchangeHistory'] as List? ?? const []).map((e) { final dt=DateTime.tryParse((e['date']??'').toString()); return '${dt==null?'':DateFormat('dd MMM yyyy').format(dt)}: ${e['minutes']} min liya · pehle ${e['balanceBefore'] ?? ''} min · baki ${e['balanceAfter'] ?? ''} min'; }).join('\n')}\n${row['note'] ?? ''}'),
               trailing: const Icon(Icons.edit_note),
               onTap: () => _updateWaterStatus(row),
             ));
