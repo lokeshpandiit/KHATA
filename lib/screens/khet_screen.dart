@@ -2174,7 +2174,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
       ),
       if (_plotScope == 'SINGLE') ...[
         const SizedBox(height: 10),
-        KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+        _tractorPlotScopeFields(),
       ],
       if (_plotScope == 'MULTIPLE') ...[
         const SizedBox(height: 10),
