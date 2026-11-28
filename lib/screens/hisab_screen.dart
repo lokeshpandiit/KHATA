@@ -12,6 +12,7 @@ import '../services/storage_backup_service.dart';
 import '../widgets/khata_widgets.dart';
 import '../widgets/voice_note_player.dart';
 import '../widgets/voice_dictation_field.dart';
+import '../widgets/plot_selector.dart';
 
 class HisabScreen extends StatefulWidget {
   const HisabScreen({super.key});
@@ -70,7 +71,9 @@ class _HisabScreenState extends State<HisabScreen> {
     );
     if (mode == null) return;
     final date = DateTime.tryParse(row['date'] as String? ?? '');
-    final direction = row['direction'] == 'PAID' ? 'PAID / GIVEN (−)' : 'RECEIVED (+)';
+    final direction = row['entryType'] == 'EXPENSE'
+        ? 'KHET EXPENSE (−)'
+        : row['direction'] == 'PAID' ? 'PAID / GIVEN' : 'RECEIVED';
     final text = [
       'KHATA - ${_storage.senderName}',
       'Category: ${row['category'] ?? ''}',
@@ -178,7 +181,8 @@ class _HisabScreenState extends State<HisabScreen> {
 
   Widget _hisabCard(Map<String, dynamic> row) {
     final amount = row['amount']?.toString() ?? '';
-    final isPaid = row['direction'] == 'PAID';
+    final isExpense = row['entryType'] == 'EXPENSE';
+    final isPaid = row['direction'] == 'PAID' || isExpense;
     final photos = _photos(row);
     final voice = row['voice'] as String?;
     final person = (row['personName'] as String? ?? '').trim();
@@ -193,14 +197,22 @@ class _HisabScreenState extends State<HisabScreen> {
               style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
             )),
             if (amount.isNotEmpty)
-              Text('${isPaid ? '−' : '+'}₹$amount',
-                style: TextStyle(color: isPaid ? Colors.red : Colors.green, fontWeight: FontWeight.w900, fontSize: 16)),
+              Text('${isExpense || isPaid ? '−' : '+'}₹$amount',
+                style: TextStyle(color: isExpense || isPaid ? Colors.red : Colors.green, fontWeight: FontWeight.w900, fontSize: 16)),
             IconButton(tooltip: 'Share', onPressed: () => _share(row), icon: const Icon(Icons.share_outlined)),
           ]),
           if (person.isNotEmpty)
             Text('Person: $person${(row['personPhone'] as String? ?? '').isEmpty ? '' : ' · ${row['personPhone']}'}',
               style: const TextStyle(color: Colors.black54)),
-          Text(row['category'] as String? ?? 'Other', style: const TextStyle(color: Colors.black54)),
+          Text(
+            isExpense ? 'Khet expense · ${row['expenseCategory'] ?? 'Other'}' : (row['category'] as String? ?? 'Other'),
+            style: const TextStyle(color: Colors.black54),
+          ),
+          if (isExpense)
+            Text(
+              'Paid ₹${row['paidAmount'] ?? 0} · Pending ₹${row['balance'] ?? 0}${row['plotId'] == null ? '' : ' · Killa linked'}',
+              style: const TextStyle(color: Colors.black54, fontSize: 12),
+            ),
           if ((row['note'] as String? ?? '').isNotEmpty) ...[
             const SizedBox(height: 7), Text(row['note'] as String),
           ],
@@ -248,9 +260,17 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
   final _personName = TextEditingController();
   final _personPhone = TextEditingController();
   final _customCategory = TextEditingController();
+  final _paidAmount = TextEditingController(text: '0');
   final List<String> _photos = [];
   late String _category = widget.initialCategory;
   String _direction = 'RECEIVED';
+  String _entryType = 'RECEIVED';
+  String _expenseCategory = 'Tractor';
+  String _tractorWork = 'Bijai';
+  String? _plotId;
+  DateTime _entryDate = DateTime.now();
+
+  bool get _isKhetExpense => _category == 'Khet' && _entryType == 'EXPENSE';
   String? _voice;
   String? _callRecording;
   bool _recording = false;
@@ -264,6 +284,7 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
     _personName.dispose();
     _personPhone.dispose();
     _customCategory.dispose();
+    _paidAmount.dispose();
     _recorder.dispose();
     super.dispose();
   }
@@ -342,6 +363,19 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _entryDate,
+      firstDate: DateTime(now.year - 8),
+      lastDate: DateTime(now.year + 8),
+    );
+    if (picked != null && mounted) {
+      setState(() => _entryDate = picked);
+    }
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     final savedCategory = _category == 'Custom' ? _customCategory.text.trim() : _category.trim();
@@ -349,24 +383,84 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
       _error('Category ka naam likhein');
       return;
     }
+
+    final isExpense = _isKhetExpense;
+    final total = double.tryParse(_amount.text.trim()) ?? 0;
+    final paid = double.tryParse(_paidAmount.text.trim().isEmpty ? '0' : _paidAmount.text.trim()) ?? 0;
+    final person = _personName.text.trim();
+    final expenseTitle = _title.text.trim().isNotEmpty
+        ? _title.text.trim()
+        : (_expenseCategory == 'Tractor' ? _tractorWork : _expenseCategory);
+
+    if (isExpense) {
+      if (expenseTitle.isEmpty || total <= 0 || paid < 0 || paid > total) {
+        _error('Kharcha ka naam, total amount aur paid amount sahi bharein');
+        return;
+      }
+      if (total - paid > 0.009 && person.isEmpty) {
+        _error('Udhar baaki hai to kisko dena hai, us vyakti ka naam zaroor bharein');
+        return;
+      }
+    }
+
     setState(() => _saving = true);
     try {
       final now = DateTime.now();
-      await _storage.addRecord('hisabs', {
-        'id': now.microsecondsSinceEpoch.toString(),
-        'category': savedCategory,
-        'title': _title.text.trim(),
-        'amount': _amount.text.trim(),
-        'direction': _direction,
-        'personName': _personName.text.trim(),
-        'personPhone': _personPhone.text.trim(),
-        'note': _note.text.trim(),
-        'photo': _photos.isEmpty ? null : _photos.first,
-        'photos': _photos,
-        'voice': _voice,
-        'callRecording': _callRecording,
-        'date': now.toIso8601String(),
-      });
+      final entryDate = DateTime(
+        _entryDate.year,
+        _entryDate.month,
+        _entryDate.day,
+        now.hour,
+        now.minute,
+      );
+      final id = now.microsecondsSinceEpoch.toString();
+
+      if (isExpense) {
+        await _storage.addRecord('hisabs', {
+          'id': id,
+          'category': 'Khet',
+          'entryType': 'EXPENSE',
+          'direction': 'EXPENSE',
+          'expenseCategory': _expenseCategory,
+          'workType': _expenseCategory == 'Tractor' ? _tractorWork : null,
+          'title': expenseTitle,
+          'amount': total.toString(),
+          'totalAmount': total,
+          'price': total,
+          'paidAmount': paid,
+          'balance': total - paid,
+          'status': paid >= total ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING'),
+          'personName': person,
+          'personPhone': _personPhone.text.trim(),
+          'plotId': _plotId,
+          'note': _note.text.trim(),
+          'photo': _photos.isEmpty ? null : _photos.first,
+          'photos': _photos,
+          'voice': _voice,
+          'callRecording': _callRecording,
+          'payments': paid > 0
+              ? [{'amount': paid, 'direction': 'PAID', 'date': entryDate.toIso8601String()}]
+              : <Map<String, dynamic>>[],
+          'date': entryDate.toIso8601String(),
+        });
+      } else {
+        await _storage.addRecord('hisabs', {
+          'id': id,
+          'category': savedCategory,
+          'title': _title.text.trim(),
+          'amount': _amount.text.trim(),
+          'direction': _category == 'Khet' ? _entryType : _direction,
+          'entryType': _category == 'Khet' ? _entryType : null,
+          'personName': person,
+          'personPhone': _personPhone.text.trim(),
+          'note': _note.text.trim(),
+          'photo': _photos.isEmpty ? null : _photos.first,
+          'photos': _photos,
+          'voice': _voice,
+          'callRecording': _callRecording,
+          'date': entryDate.toIso8601String(),
+        });
+      }
       if (mounted) Navigator.pop(context);
     } catch (error) {
       _error('Could not save hisab: $error');
@@ -378,11 +472,15 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
   @override
   Widget build(BuildContext context) {
     final effectiveCategory = _category == 'Custom' ? _customCategory.text.trim() : _category;
-    final showPerson = effectiveCategory == 'Len-Den' || effectiveCategory == 'Studio';
+    final showPerson = _category == 'Khet' || effectiveCategory == 'Len-Den' || effectiveCategory == 'Studio';
     final formCategories = <String>['Khet', 'Studio', 'Len-Den', 'Other', 'Custom'];
     if (!formCategories.contains(widget.initialCategory)) {
       formCategories.insert(formCategories.length - 1, widget.initialCategory);
     }
+    final amountValue = double.tryParse(_amount.text.trim()) ?? 0;
+    final paidValue = double.tryParse(_paidAmount.text.trim()) ?? 0;
+    final pendingValue = (amountValue - paidValue).clamp(0, double.infinity).toDouble();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Add New Hisab')),
       body: ListView(
@@ -391,59 +489,171 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
           DropdownButtonFormField<String>(
             initialValue: _category,
             decoration: const InputDecoration(labelText: 'Category'),
-            items: formCategories
-                .map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+            items: formCategories.map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
             onChanged: (value) => setState(() => _category = value ?? _category),
           ),
           if (_category == 'Custom') ...[
             const SizedBox(height: 10),
-            TextField(controller: _customCategory, textCapitalization: TextCapitalization.words,
+            TextField(
+              controller: _customCategory,
+              textCapitalization: TextCapitalization.words,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(labelText: 'Apni category ka naam likhein', hintText: 'Jaise: Ghar, Personal, Repair, Udhaar')),
+              decoration: const InputDecoration(
+                labelText: 'Apni category ka naam likhein',
+                hintText: 'Jaise: Ghar, Personal, Repair, Udhaar',
+              ),
+            ),
           ],
           const SizedBox(height: 12),
-          TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title (optional)')),
-          const SizedBox(height: 12),
+          if (_category == 'Khet') ...[
+            DropdownButtonFormField<String>(
+              initialValue: _entryType,
+              decoration: const InputDecoration(labelText: 'Khet mein kis tarah ki entry?'),
+              items: const [
+                DropdownMenuItem(value: 'RECEIVED', child: Text('Paise liye')),
+                DropdownMenuItem(value: 'PAID', child: Text('Paise diye')),
+                DropdownMenuItem(value: 'EXPENSE', child: Text('Khareeda / Kharcha')),
+              ],
+              onChanged: (value) => setState(() => _entryType = value ?? _entryType),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (_isKhetExpense) ...[
+            DropdownButtonFormField<String>(
+              initialValue: _expenseCategory,
+              decoration: const InputDecoration(labelText: 'Kharcha kis cheez ka hai?'),
+              items: const [
+                DropdownMenuItem(value: 'Tractor', child: Text('Tractor ka kaam')),
+                DropdownMenuItem(value: 'Dawai', child: Text('Dawai')),
+                DropdownMenuItem(value: 'Khaad', child: Text('Khaad')),
+                DropdownMenuItem(value: 'Diesel', child: Text('Diesel')),
+                DropdownMenuItem(value: 'Rassi / Samaan', child: Text('Rassi / Samaan')),
+                DropdownMenuItem(value: 'Pani / Sinchai', child: Text('Pani / Sinchai')),
+                DropdownMenuItem(value: 'Mazdoori', child: Text('Mazdoori')),
+                DropdownMenuItem(value: 'Other', child: Text('Other')),
+              ],
+              onChanged: (value) => setState(() => _expenseCategory = value ?? _expenseCategory),
+            ),
+            if (_expenseCategory == 'Tractor') ...[
+              const SizedBox(height: 10),
+              DropdownButtonFormField<String>(
+                initialValue: _tractorWork,
+                decoration: const InputDecoration(labelText: 'Tractor ka kaam'),
+                items: const [
+                  DropdownMenuItem(value: 'Bijai', child: Text('Bijai')),
+                  DropdownMenuItem(value: 'Jutai', child: Text('Jutai')),
+                  DropdownMenuItem(value: 'Rotavator', child: Text('Rotavator')),
+                  DropdownMenuItem(value: 'Leveling', child: Text('Leveling')),
+                  DropdownMenuItem(value: 'Other tractor work', child: Text('Other tractor work')),
+                ],
+                onChanged: (value) => setState(() => _tractorWork = value ?? _tractorWork),
+              ),
+            ],
+            const SizedBox(height: 10),
+            TextField(
+              controller: _title,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: _expenseCategory == 'Tractor' ? 'Kaam / fasal ka naam' : 'Samaan ka naam',
+                hintText: _expenseCategory == 'Tractor' ? 'Jaise: Gehu ki bijai' : 'Jaise: DAP, diesel, rassi',
+              ),
+            ),
+            const SizedBox(height: 10),
+            KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+            const SizedBox(height: 10),
+          ] else ...[
+            TextField(
+              controller: _title,
+              decoration: const InputDecoration(labelText: 'Title (optional)'),
+            ),
+          ],
           if (showPerson) ...[
-            TextField(controller: _personName, textCapitalization: TextCapitalization.words,
-              decoration: const InputDecoration(labelText: 'Person name')),
+            TextField(
+              controller: _personName,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: _isKhetExpense ? 'Dukaan wala / tractor wala (optional)' : 'Person name (optional)',
+              ),
+            ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(onPressed: _pickContact, icon: const Icon(Icons.contacts_outlined),
-              label: const Text('Pick from phone contacts')),
+            OutlinedButton.icon(
+              onPressed: _pickContact,
+              icon: const Icon(Icons.contacts_outlined),
+              label: const Text('Pick from phone contacts'),
+            ),
             if (_personPhone.text.isNotEmpty)
               Text('Phone: ${_personPhone.text}', style: const TextStyle(color: Colors.black54)),
             const SizedBox(height: 12),
           ],
-          TextField(controller: _amount, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Amount (₹, optional)')),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String>(
-            initialValue: _direction,
-            decoration: const InputDecoration(labelText: 'Money direction'),
-            items: const [
-              DropdownMenuItem(value: 'RECEIVED', child: Text('Paise mile (+) · Green')),
-              DropdownMenuItem(value: 'PAID', child: Text('Paise diye (−) · Red')),
-            ],
-            onChanged: (value) => setState(() => _direction = value ?? _direction),
+          TextField(
+            controller: _amount,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              labelText: _isKhetExpense ? 'Total kharcha / bill (₹)' : 'Amount (₹, optional)',
+            ),
+          ),
+          if (_isKhetExpense) ...[
+            const SizedBox(height: 10),
+            TextField(
+              controller: _paidAmount,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(labelText: 'Abhi kitne paise diye? (₹)'),
+            ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Baaki dena hai: ₹${pendingValue.toStringAsFixed(0)}',
+                style: TextStyle(fontWeight: FontWeight.w800, color: pendingValue > 0 ? Colors.red : Colors.green),
+              ),
+            ),
+          ],
+          if (_category != 'Khet') ...[
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              initialValue: _direction,
+              decoration: const InputDecoration(labelText: 'Money direction'),
+              items: const [
+                DropdownMenuItem(value: 'RECEIVED', child: Text('Paise mile (+) · Green')),
+                DropdownMenuItem(value: 'PAID', child: Text('Paise diye (−) · Red')),
+              ],
+              onChanged: (value) => setState(() => _direction = value ?? _direction),
+            ),
+          ],
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _pickDate,
+            icon: const Icon(Icons.calendar_month_outlined),
+            label: Text('Date: ${DateFormat('dd MMM yyyy').format(_entryDate)}'),
           ),
           const SizedBox(height: 12),
-          VoiceDictationField(
-            controller: _note,
-            label: 'Text note (optional)',
-          ),
+          VoiceDictationField(controller: _note, label: 'Text note (optional)'),
           const SizedBox(height: 18),
           const Text('Attachments', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            OutlinedButton.icon(onPressed: () => _pickPhotos(ImageSource.camera),
-              icon: const Icon(Icons.camera_alt_outlined), label: const Text('Camera')),
-            OutlinedButton.icon(onPressed: () => _pickPhotos(ImageSource.gallery),
-              icon: const Icon(Icons.photo_library_outlined), label: const Text('Add multiple photos')),
-            OutlinedButton.icon(onPressed: _toggleRecording,
+            OutlinedButton.icon(
+              onPressed: () => _pickPhotos(ImageSource.camera),
+              icon: const Icon(Icons.camera_alt_outlined),
+              label: const Text('Camera'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => _pickPhotos(ImageSource.gallery),
+              icon: const Icon(Icons.photo_library_outlined),
+              label: const Text('Add multiple photos'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _toggleRecording,
               icon: Icon(_recording ? Icons.stop : Icons.mic_none),
-              label: Text(_recording ? 'Stop recording' : 'Voice note')),
-            OutlinedButton.icon(onPressed: _pickCallRecording,
-              icon: const Icon(Icons.call), label: const Text('Call recording')),
+              label: Text(_recording ? 'Stop recording' : 'Voice note'),
+            ),
+            OutlinedButton.icon(
+              onPressed: _pickCallRecording,
+              icon: const Icon(Icons.call),
+              label: const Text('Call recording'),
+            ),
           ]),
           if (_photos.isNotEmpty) ...[
             const SizedBox(height: 12),
@@ -451,9 +661,11 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
               alignment: Alignment.topRight,
               children: [
                 mediaThumbnail(path, size: 76),
-                IconButton(visualDensity: VisualDensity.compact,
+                IconButton(
+                  visualDensity: VisualDensity.compact,
                   onPressed: () => setState(() => _photos.remove(path)),
-                  icon: const Icon(Icons.cancel, color: Colors.red)),
+                  icon: const Icon(Icons.cancel, color: Colors.red),
+                ),
               ],
             )).toList()),
           ],
@@ -470,11 +682,19 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
             label: Text(_saving ? 'Saving…' : 'Save Hisab'),
           ),
           const SizedBox(height: 6),
-          const Text('All fields are optional. Save even an attachment-only entry.',
-            textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, fontSize: 12)),
+          Text(
+            _isKhetExpense
+                ? 'Total kharcha poora record hoga; paid aur baki alag track honge.'
+                : 'All fields are optional. Save even an attachment-only entry.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.black54, fontSize: 12),
+          ),
           const SizedBox(height: 10),
-          Text('Created ${DateFormat('d MMM yyyy, h:mm a').format(DateTime.now())}',
-            textAlign: TextAlign.center, style: const TextStyle(color: Colors.black45, fontSize: 12)),
+          Text(
+            'Created ${DateFormat('d MMM yyyy, h:mm a').format(DateTime.now())}',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.black45, fontSize: 12),
+          ),
         ],
       ),
     );
