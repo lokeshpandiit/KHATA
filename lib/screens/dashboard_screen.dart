@@ -746,7 +746,15 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
                         '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}',
                 ),
                 trailing: Text(widget.money.format(_balance(row)), style: const TextStyle(color: Colors.red,fontWeight: FontWeight.bold)),
-                onTap: isPurchase ? () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => KhetVendorLedgerDashboardScreen(vendorId: row['vendorId'].toString(), vendorName: (row['vendorName']??'Shop').toString(), rows: widget.storage.records('khet'))) : null,
+                onTap: isPurchase ? () {
+                  Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => KhetVendorLedgerDashboardScreen(
+                      vendorId: row['vendorId'].toString(),
+                      vendorName: (row['vendorName'] ?? 'Shop').toString(),
+                      rows: widget.storage.records('khet'),
+                    ),
+                  ));
+                } : null,
               ),
             );
           }),
@@ -808,9 +816,49 @@ class _KhetVendorLedgerDashboardScreenState extends State<KhetVendorLedgerDashbo
  Future<void> pay()async{final c=TextEditingController();final result=await showDialog<double>(context:context,builder:(ctx)=>AlertDialog(title:Text('Payment · ${widget.vendorName}'),content:Column(mainAxisSize:MainAxisSize.min,children:[Text('Remaining: ₹${balance.toStringAsFixed(0)}'),TextField(controller:c,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'Payment amount (full/partial)'))]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),FilledButton(onPressed:(){final v=double.tryParse(c.text);if(v!=null&&v>0)Navigator.pop(ctx,v);},child:const Text('Save'))]));c.dispose();if(result==null)return;await StorageBackupService.instance.addRecord('khet',{'id':DateTime.now().microsecondsSinceEpoch.toString(),'type':'KHET_PURCHASE_PAYMENT','vendorId':widget.vendorId,'vendorName':widget.vendorName,'amount':result,'date':DateTime.now().toIso8601String(),'allocationMethod':'OLDEST_BILL_FIRST'});if(mounted)setState((){});}
  @override Widget build(BuildContext context){final p=purchases..sort((a,b)=>(a['date']??'').toString().compareTo((b['date']??'').toString()));final paidAt=p.fold<double>(0,(s,r)=>s+n(r['paidAmount'])),paidLater=payments.fold<double>(0,(s,r)=>s+n(r['amount']));final fmt=NumberFormat.currency(locale:'en_IN',symbol:'₹',decimalDigits:0);return Scaffold(appBar:AppBar(title:Text('${widget.vendorName} · Khata')),body:ListView(padding:const EdgeInsets.all(16),children:[Card(child:ListTile(title:const Text('Total purchase'),trailing:Text(fmt.format(p.fold<double>(0,(s,r)=>s+n(r['totalAmount'])))))),Card(child:ListTile(title:const Text('Paid at purchase'),trailing:Text(fmt.format(paidAt)))),Card(child:ListTile(title:const Text('Payments later'),trailing:Text(fmt.format(paidLater)))),Card(child:ListTile(title:Text(balance>=0?'Net pending':'Advance'),trailing:Text(fmt.format(balance.abs()),style:TextStyle(fontWeight:FontWeight.bold,color:balance>0?Colors.red:Colors.green)))),const SizedBox(height:10),const Text('Bills',style:TextStyle(fontWeight:FontWeight.bold,fontSize:18)),...p.map((r){final b=n(r['totalAmount'])-n(r['paidAmount']);return Card(child:ListTile(title:Text((r['title']??'Purchase').toString()),subtitle:Text('Bill ${fmt.format(n(r['totalAmount']))} · Paid ${fmt.format(n(r['paidAmount']))} · ${DateFormat('dd MMM yyyy').format(DateTime.tryParse(r['invoiceDate']??r['date']??'')??DateTime.now())}'),trailing:Text(fmt.format(b.clamp(0,double.infinity)),style:TextStyle(color:b>0?Colors.red:Colors.green,fontWeight:FontWeight.bold))));})]),floatingActionButton:FloatingActionButton.extended(onPressed:pay,icon:const Icon(Icons.payments),label:const Text('Full / Partial Payment')));}
 }
-class _MonthVendorPurchasesScreen extends StatelessWidget{
- const _MonthVendorPurchasesScreen({required this.rows,required this.allRows,required this.monthTitle,required this.money});
- final List<Map<String,dynamic>> rows,allRows;final String monthTitle;final NumberFormat money;
- double n(dynamic v)=>v is num?v.toDouble():double.tryParse((v??'').toString())??0;
- @override Widget build(BuildContext context){final byPerson=<String,List<Map<String,dynamic>>>{};for(final r in rows){byPerson.putIfAbsent((r['vendorName']??'Shop').toString(),()=>[]).add(r);}final names=byPerson.keys.toList()..sort();return Scaffold(appBar:AppBar(title:Text('${monthTitle} · Purchase Hisab')),body:ListView(padding:const EdgeInsets.all(16),children:[Card(child:ListTile(title:const Text('Month total purchases'),trailing:Text(money.format(rows.fold<double>(0,(s,r)=>s+n(r['totalAmount'])))))),...names.map((name){final list=byPerson[name]!;final total=list.fold<double>(0,(s,r)=>s+n(r['totalAmount']));final paid=list.fold<double>(0,(s,r)=>s+n(r['paidAmount']));final id=list.first['vendorId']?.toString()??'';return Card(child:ListTile(title:Text(name,style:const TextStyle(fontWeight:FontWeight.bold)),subtitle:Text('${list.length} bills · Bought ${money.format(total)} · Paid ${money.format(paid)} · Pending ${money.format(total-paid)}'),trailing:const Icon(Icons.chevron_right),onTap:()=>Navigator.push(context,MaterialPageRoute<void>(builder:(_)=>KhetVendorLedgerDashboardScreen(vendorId:id,vendorName:name,rows:allRows))));}),...rows.map((r)=>Card(child:ListTile(title:Text('${r['title']??'Purchase'} · ${r['vendorName']??''}'),subtitle:Text('${r['purchaseCategory']??''} · ${DateFormat('dd MMM yyyy').format(DateTime.tryParse(r['invoiceDate']??r['date']??'')??DateTime.now())}'),trailing:Text(money.format(n(r['totalAmount']))))))]));}
+class _MonthVendorPurchasesScreen extends StatelessWidget {
+  const _MonthVendorPurchasesScreen({
+    required this.rows, required this.allRows, required this.monthTitle, required this.money,
+  });
+  final List<Map<String, dynamic>> rows, allRows;
+  final String monthTitle;
+  final NumberFormat money;
+  double n(dynamic v) => v is num ? v.toDouble() : double.tryParse((v ?? '').toString()) ?? 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final byPerson = <String, List<Map<String, dynamic>>>{};
+    for (final r in rows) {
+      byPerson.putIfAbsent((r['vendorName'] ?? 'Shop').toString(), () => []).add(r);
+    }
+    final names = byPerson.keys.toList()..sort();
+    final total = rows.fold<double>(0, (s, r) => s + n(r['totalAmount']));
+    return Scaffold(
+      appBar: AppBar(title: Text('$monthTitle · Purchase Hisab')),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        Card(child: ListTile(
+          title: const Text('Month total purchases'), trailing: Text(money.format(total)),
+        )),
+        ...names.map((name) {
+          final list = byPerson[name]!;
+          final bought = list.fold<double>(0, (s, r) => s + n(r['totalAmount']));
+          final paid = list.fold<double>(0, (s, r) => s + n(r['paidAmount']));
+          final id = list.first['vendorId']?.toString() ?? '';
+          return Card(child: ListTile(
+            title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text('${list.length} bills · Bought ${money.format(bought)} · Paid ${money.format(paid)} · Pending ${money.format(bought - paid)}'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute<void>(
+              builder: (_) => KhetVendorLedgerDashboardScreen(vendorId: id, vendorName: name, rows: allRows),
+            )),
+          ));
+        }),
+        ...rows.map((r) => Card(child: ListTile(
+          title: Text('${r['title'] ?? 'Purchase'} · ${r['vendorName'] ?? ''}'),
+          subtitle: Text('${r['purchaseCategory'] ?? ''} · ${DateFormat('dd MMM yyyy').format(DateTime.tryParse((r['invoiceDate'] ?? r['date'] ?? '').toString()) ?? DateTime.now())}'),
+          trailing: Text(money.format(n(r['totalAmount']))),
+        ))),
+      ]),
+    );
+  }
 }
