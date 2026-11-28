@@ -344,7 +344,6 @@ class _MonthPersonLedgerScreen extends StatelessWidget {
     }
     if (type == 'KHET_PURCHASE_PAYMENT') return _amount(row['amount']);
     if (type == 'KUA') return _amount(row['cashAmount']) - _amount(row['cashPaid']);
-    if (type == 'KUA') return _amount(row['cashAmount']) - _amount(row['cashPaid']);
     final amount = _amount(row['amount']);
     return row['direction'] == 'PAID' ? amount : -amount;
   }
@@ -438,6 +437,7 @@ class _PersonMonthDetailScreen extends StatelessWidget {
       return _amount(row['paidAmount']) - _amount(row['totalAmount'] ?? row['amount'] ?? row['price']);
     }
     if (type == 'KHET_PURCHASE_PAYMENT') return _amount(row['amount']);
+    if (type == 'KUA') return _amount(row['cashAmount']) - _amount(row['cashPaid']);
     return row['direction'] == 'PAID' ? _amount(row['amount']) : -_amount(row['amount']);
   }
 
