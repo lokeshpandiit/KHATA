@@ -750,7 +750,7 @@ class _KhetScreenState extends State<KhetScreen> {
         if (row['season'] != null) details.add('${row['season']} ${row['year'] ?? ''}');
         if (date != null) details.add(timeLabel(date));
       }
-      final noteText = (row['note'] as String? ?? '').trim();
+      final noteText = cleanDisplayText(row['note']).trim();
       if (noteText.isNotEmpty) details.add(noteText);
       return Card(
         margin: const EdgeInsets.only(bottom: 9),
@@ -885,7 +885,7 @@ class _KhetScreenState extends State<KhetScreen> {
                     if (row['reminderDate'] is String)
                       Text('Reminder: ${DateFormat('dd MMM yyyy, hh:mm a').format(DateTime.parse(row['reminderDate'] as String))}', style: const TextStyle(color: Colors.deepOrange)),
                   ],
-                  if ((row['note'] as String? ?? '').isNotEmpty) Text(row['note'] as String),
+                  if ((row['note'] as String? ?? '').isNotEmpty) Text(cleanDisplayText(row['note'])),
                   if (date != null)
                     Text('${timeLabel(date)} · ${row['type']}',
                       style: const TextStyle(fontSize: 12, color: Colors.black54)),
