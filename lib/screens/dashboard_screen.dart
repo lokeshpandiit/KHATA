@@ -847,29 +847,56 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
         .toDouble();
   }
 
-  Future<void> _updateWaterStatus(Map<String,dynamic> row) async {
+  int _waterOwedMinutes(Map<String, dynamic> row) =>
+      _amount(row['borrowedMinutes']).toInt() + _amount(row['borrowedNaharMinutes']).toInt() + _amount(row['borrowedKuaMinutes']).toInt();
+
+  int _waterExchangedMinutes(Map<String, dynamic> row) {
+    final history = row['waterExchangeHistory'];
+    if (history is List) return history.fold<int>(0, (sum, item) => sum + (item is Map ? _amount(item['minutes']).toInt() : 0));
+    return _amount(row['waterExchangedMinutes']).toInt();
+  }
+
+  Future<void> _updateWaterStatus(Map<String, dynamic> row) async {
     final noteController = TextEditingController(text: (row['waterPaymentNote'] ?? '').toString());
+    final minutesController = TextEditingController();
     String status = (row['waterPaymentStatus'] ?? 'PENDING').toString();
+    DateTime exchangeDate = DateTime.now();
+    final owed = _waterOwedMinutes(row);
+    final exchanged = _waterExchangedMinutes(row);
+    final remaining = (owed - exchanged).clamp(0, 999999);
     final saved = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
       title: Text('Pani pending · ${row['borrowedContact'] ?? row['contact'] ?? 'Person'}'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('Total udhaar: $owed min\nBadle mein mila: $exchanged min\nBaki: $remaining min', style: const TextStyle(fontWeight: FontWeight.w600)),
         DropdownButtonFormField<String>(value: status, items: const [
           DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
           DropdownMenuItem(value: 'PAID', child: Text('Payment mil gaya')),
           DropdownMenuItem(value: 'WATER_EXCHANGE', child: Text('Badle mein pani liya')),
         ], onChanged: (v) => setDialog(() { status = v ?? 'PENDING'; })),
+        if (status == 'WATER_EXCHANGE') ...[
+          TextField(controller: minutesController, keyboardType: const TextInputType.numberWithOptions(decimal: false), decoration: const InputDecoration(labelText: 'Badle mein kitne minute pani mila?'), onChanged: (_) => setDialog(() {})),
+          OutlinedButton.icon(icon: const Icon(Icons.calendar_today), label: Text('Pani liya: ${DateFormat('dd MMM yyyy').format(exchangeDate)}'), onPressed: () async {
+            final picked = await showDatePicker(context: ctx, initialDate: exchangeDate, firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 3650)));
+            if (picked != null) setDialog(() => exchangeDate = DateTime(picked.year, picked.month, picked.day, exchangeDate.hour, exchangeDate.minute));
+          }),
+          Text('Iske baad baki: ${(remaining - (int.tryParse(minutesController.text) ?? 0)).clamp(0, 999999)} min'),
+        ],
         TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note')),
-      ]),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save'))],
+      ])),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () {
+        if (status == 'WATER_EXCHANGE') { final m = int.tryParse(minutesController.text.trim()) ?? 0; if (m <= 0 || m > remaining) { ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('1 se $remaining minute enter karein'))); return; } }
+        Navigator.pop(ctx, true);
+      }, child: const Text('Save'))],
     )));
-    if (saved != true) { noteController.dispose(); return; }
-    final updated = Map<String,dynamic>.from(row)
-      ..['waterPaymentStatus'] = status
-      ..['waterPaymentPending'] = status == 'PENDING'
-      ..['waterPaymentNote'] = noteController.text.trim();
+    if (saved != true) { noteController.dispose(); minutesController.dispose(); return; }
+    final updated = Map<String, dynamic>.from(row);
+    final history = row['waterExchangeHistory'] is List ? List<Map<String, dynamic>>.from((row['waterExchangeHistory'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e))) : <Map<String, dynamic>>[];
+    if (status == 'WATER_EXCHANGE') history.add({'minutes': int.parse(minutesController.text.trim()), 'date': exchangeDate.toIso8601String(), 'note': noteController.text.trim()});
+    final totalExchanged = history.fold<int>(0, (sum, e) => sum + _amount(e['minutes']).toInt());
+    final left = (owed - totalExchanged).clamp(0, 999999);
+    updated..['waterExchangeHistory'] = history..['waterExchangedMinutes'] = totalExchanged..['waterRemainingMinutes'] = left..['waterPaymentStatus'] = status == 'WATER_EXCHANGE' && left > 0 ? 'PENDING' : status..['waterPaymentPending'] = status == 'PAID' ? false : left > 0..['waterPaymentNote'] = noteController.text.trim();
     await widget.storage.updateRecord('khet', row['id'].toString(), updated);
-    noteController.dispose();
-    if (mounted) setState(() {});
+    noteController.dispose(); minutesController.dispose(); if (mounted) setState(() {});
   }
 
   Future<void> _addPlan() async {
@@ -1122,11 +1149,13 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
           const Text('Pending Pani', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           ...widget.waterRows.where((row) => row['waterPaymentPending'] == true).map((row) {
             final date = DateTime.tryParse(row['date']?.toString() ?? '');
-            final mins = (row['borrowedMinutes'] as num?)?.toInt() ?? 0;
+            final mins = _waterOwedMinutes(row);
+            final exchanged = _waterExchangedMinutes(row);
+            final remaining = (mins - exchanged).clamp(0, 999999);
             final source = (row['borrowedSource'] ?? row['source'] ?? 'Pani').toString();
             return Card(child: ListTile(
               title: Text('${row['borrowedContact'] ?? row['contact'] ?? 'Person'} · $source'),
-              subtitle: Text('$mins min · ${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}\n${row['note'] ?? ''}'),
+              subtitle: Text('Udhaar: $mins min · Mila: $exchanged min · Baki: $remaining min\n${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}\n${row['note'] ?? ''}'),
               trailing: const Icon(Icons.edit_note),
               onTap: () => _updateWaterStatus(row),
             ));
