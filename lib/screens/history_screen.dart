@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../services/history_projection.dart';
 import '../services/storage_backup_service.dart';
-import '../widgets/khata_widgets.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -15,82 +15,26 @@ class _HistoryScreenState extends State<HistoryScreen> {
   final _search = TextEditingController();
   String _filter = 'All';
 
-  DateTime _date(Map<String, dynamic> row) {
-    for (final key in ['date', 'createdAt', 'updatedAt']) {
-      final value = row[key];
-      if (value is String) {
-        final parsed = DateTime.tryParse(value);
-        if (parsed != null) return parsed;
-      }
-    }
-    return DateTime.now();
-  }
-
-  String _str(dynamic value) => cleanDisplayText(value).trim();
-  String _minutes(dynamic value) {
-    final m = value is int ? value : int.tryParse('$value') ?? 0;
-    return m >= 60 ? '${m ~/ 60} hr ${m % 60} min' : '$m min';
-  }
-
-  List<_Item> _items() {
-    final all = <_Item>[];
-    void addPaymentRows(Map<String, dynamic> r, String type, String baseTitle) {
-      final payments = r['payments'];
-      if (payments is! List) return;
-      for (final p in payments.whereType<Map>()) {
-        final paymentDate = DateTime.tryParse((p['date'] ?? '').toString()) ?? DateTime.now();
-        final amount = p['amount'];
-        final direction = _str(p['direction']);
-        final note = _str(p['note']);
-        final balance = p['balanceAfter'];
-        all.add(_Item(type, 'Payment · $baseTitle', [
-          direction, if (amount != null && amount.toString().isNotEmpty) '₹$amount',
-          if (balance != null) 'Remaining ₹$balance', if (note.isNotEmpty) note,
-        ].where((s)=>s.isNotEmpty).join(' · '), paymentDate));
-      }
-    }
-    for (final r in _storage.records('hisabs')) {
-      final title = _str(r['title']).isEmpty ? _str(r['category']) : _str(r['title']);
-      // Standalone person-to-person payments are individual history events.
-      if (r['paymentKind'] == 'PERSON_PAYMENT' || r['entryType'] == 'PAYMENT') {
-        final person = _str(r['personName']);
-        final paymentTitle = _str(r['title']).isNotEmpty ? _str(r['title']) : (r['direction'] == 'PAID' ? 'आपने पैसे दिए' : 'आपको पैसे मिले');
-        final amount = _str(r['amount']);
-        final balance = r['balanceAfter'];
-        all.add(_Item('HISAB', '$paymentTitle${person.isNotEmpty ? ' · $person' : ''}', [
-          if (_str(r['direction']).isNotEmpty) _str(r['direction']),
-          if (amount.isNotEmpty) '₹$amount',
-          if (balance != null) 'Balance ₹$balance',
-          if (_str(r['note']).isNotEmpty) _str(r['note']),
-        ].where((s)=>s.isNotEmpty).join(' · '), _date(r)));
-        continue;
-      }
-      all.add(_Item('HISAB', title,
-        [_str(r['category']), if (_str(r['amount']).isNotEmpty) '₹${r['amount']}', _str(r['note'])].where((s)=>s.isNotEmpty).join(' · '), _date(r)));
-      addPaymentRows(r, 'HISAB', title);
-    }
-    for (final r in _storage.records('khet')) {
-      final water = r.containsKey('source') || r.containsKey('minutes') || r.containsKey('direction');
-      final type = water ? 'PANI' : 'KHET';
-      final title = water ? '${_str(r['contact']).isEmpty ? 'Pani' : _str(r['contact'])} · ${_str(r['source'])}' : (_str(r['title']).isEmpty ? _str(r['type']) : _str(r['title']));
-      all.add(_Item(type, title,
-        water ? '${_str(r['direction'])} · ${_minutes(r['minutes'])}' : [_str(r['type']), if (_str(r['price']).isNotEmpty) '₹${r['price']}', _str(r['note'])].where((s)=>s.isNotEmpty).join(' · '), _date(r)));
-      addPaymentRows(r, type, title);
-    }
-    for (final r in _storage.records('members')) {
-      final docs = (r['documents'] as List? ?? []).length;
-      all.add(_Item('DOCUMENTS', 'Member · ${_str(r['name'])}', docs == 0 ? 'Member record' : '$docs document(s)', _date(r)));
-    }
-    for (final r in _storage.records('products')) {
-      all.add(_Item('DOCUMENTS', 'Product · ${_str(r['name'])}', _str(r['note']), _date(r)));
-    }
-    all.sort((a,b)=>b.date.compareTo(a.date));
-    final q=_search.text.trim().toLowerCase();
-    return all.where((i)=>(_filter=='All'||i.type==_filter)&&('${i.type} ${i.title} ${i.subtitle}').toLowerCase().contains(q)).toList();
+  List<HistoryEntry> _items() {
+    final all = HistoryProjection.build(
+      hisabs: _storage.records('hisabs'),
+      khet: _storage.records('khet'),
+      members: _storage.records('members'),
+      products: _storage.records('products'),
+    );
+    final query = _search.text.trim().toLowerCase();
+    return all.where((item) =>
+      (_filter == 'All' || item.type == _filter) &&
+      ('${item.type} ${item.title} ${item.subtitle}').toLowerCase().contains(query)
+    ).toList();
   }
 
   @override
-  void dispose(){_search.dispose();super.dispose();}
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final rows = _items();
@@ -125,18 +69,14 @@ class _HistoryScreenState extends State<HistoryScreen> {
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: filters
-                .map(
-                  (f) => Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: ChoiceChip(
-                      label: Text(f),
-                      selected: _filter == f,
-                      onSelected: (_) => setState(() => _filter = f),
-                    ),
-                  ),
-                )
-                .toList(),
+            children: filters.map((filter) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: ChoiceChip(
+                label: Text(filter),
+                selected: _filter == filter,
+                onSelected: (_) => setState(() => _filter = filter),
+              ),
+            )).toList(),
           ),
         ),
         Expanded(
@@ -153,9 +93,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       'PANI' => Icons.water_drop_outlined,
                       _ => Icons.folder_outlined,
                     };
+                    final dateText = item.date == null
+                        ? 'Date unavailable'
+                        : DateFormat('dd MMM yyyy · hh:mm a').format(item.date!);
                     final subtitle = item.subtitle.isEmpty
-                        ? DateFormat('dd MMM yyyy · hh:mm a').format(item.date)
-                        : '${item.subtitle}\n${DateFormat('dd MMM yyyy · hh:mm a').format(item.date)}';
+                        ? dateText
+                        : '${item.subtitle}\n$dateText';
                     return Card(
                       margin: const EdgeInsets.only(bottom: 10),
                       child: ListTile(
@@ -178,10 +121,4 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ],
     );
   }
-}
-
-class _Item {
-  _Item(this.type,this.title,this.subtitle,this.date);
-  final String type,title,subtitle;
-  final DateTime date;
 }
