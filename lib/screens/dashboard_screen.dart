@@ -412,7 +412,7 @@ class _KhetExpensesScreen extends StatelessWidget {
   return Scaffold(appBar:AppBar(title:const Text('All Khet Expenses')),body:ListView(padding:const EdgeInsets.all(16),children:[
    Card(child:ListTile(title:Text('${expenses.length} expense records'),trailing:Text(money.format(total),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18)))),
    if(expenses.isEmpty)const Center(child:Padding(padding:EdgeInsets.all(30),child:Text('Koi expense record nahi hai.'))),
-   ...expenses.map((r){final d=DateTime.tryParse(r['date']?.toString()??'');return Card(child:ListTile(title:Text(r['type']?.toString()??'Expense'),subtitle:Text('${r['description']??r['name']??''}${d==null?'':'\\n'+DateFormat('dd MMM yyyy').format(d)}'),trailing:Text(money.format(amount(r['price'])))));})
+   ...expenses.map((r){final d=DateTime.tryParse(r['date']?.toString()??'');return Card(child:ListTile(title:Text(r['type']?.toString()??'Expense'),subtitle:Text('${r['description']??r['name']??''}${d==null?'':'\n'+DateFormat('dd MMM yyyy').format(d)}'),trailing:Text(money.format(amount(r['price'])))));})
   ]));
  }
 }
