@@ -234,12 +234,21 @@ class _KhetScreenState extends State<KhetScreen> {
     for (final contact in _contacts) {
       final rows = _personWaterRows(contact['id']);
       if (rows.isEmpty) continue;
-      final given = _personWaterTotal(rows, 'Diya');
-      final taken = _personWaterTotal(rows, 'Liya');
-      final solarNet = _personWaterTotalByWell(rows, 'Diya', 'Solar') -
-          _personWaterTotalByWell(rows, 'Liya', 'Solar');
-      final dieselNet = _personWaterTotalByWell(rows, 'Diya', 'Diesel') -
-          _personWaterTotalByWell(rows, 'Liya', 'Diesel');
+      final moneyRows = rows.where((row) => row['settlementMode'] != 'WATER').toList();
+      final barterRows = rows.where((row) => row['settlementMode'] == 'WATER').toList();
+      final given = _personWaterTotal(moneyRows, 'Diya');
+      final taken = _personWaterTotal(moneyRows, 'Liya');
+      final solarNet = _personWaterTotalByWell(moneyRows, 'Diya', 'Solar') -
+          _personWaterTotalByWell(moneyRows, 'Liya', 'Solar');
+      final dieselNet = _personWaterTotalByWell(moneyRows, 'Diya', 'Diesel') -
+          _personWaterTotalByWell(moneyRows, 'Liya', 'Diesel');
+      int exchangeNet(String kind) => barterRows.where((row) =>
+          row['waterExchangeType'] == kind).fold<int>(0, (sum, row) {
+        final minutes = (row['minutes'] as num?)?.toInt() ?? 0;
+        return sum + (row['direction'] == 'Diya' ? minutes : row['direction'] == 'Liya' ? -minutes : 0);
+      });
+      final kuaNet = exchangeNet('Kua');
+      final naharNet = exchangeNet('Nahar');
       final net = solarNet + dieselNet;
       cards.add(Card(
           child: Padding(
@@ -261,21 +270,18 @@ class _KhetScreenState extends State<KhetScreen> {
                     icon: const Icon(Icons.share_outlined, size: 19),
                   ),
                 ]),
-                Text('दिया: +${formatMinutes(given)}   लिया: −${formatMinutes(taken)}',
-                    style: const TextStyle(fontSize: 12)),
-                const SizedBox(height: 4),
-                Text(
-                  '☀️ सोलर: ${formatSignedMinutes(solarNet)}   ⛽ डीजल: ${formatSignedMinutes(dieselNet)}',
-                  style: const TextStyle(fontSize: 11),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  'NET: ${formatSignedMinutes(net)}',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    color: net > 0 ? Colors.green : net < 0 ? Colors.red : Colors.black54,
-                  ),
-                ),
+                if (moneyRows.isNotEmpty) Text('पैसों वाला पानी · दिया: +${formatMinutes(given)}   लिया: −${formatMinutes(taken)}', style: const TextStyle(fontSize: 12)),
+                if (moneyRows.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text('☀️ सोलर: ${formatSignedMinutes(solarNet)}   ⛽ डीजल: ${formatSignedMinutes(dieselNet)}', style: const TextStyle(fontSize: 11)),
+                  const SizedBox(height: 5),
+                  Text('NET (पैसों वाला पानी): ${formatSignedMinutes(net)}', style: TextStyle(fontWeight: FontWeight.w900, color: net > 0 ? Colors.green : net < 0 ? Colors.red : Colors.black54)),
+                ],
+                if (barterRows.isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  Text('💧 कुएँ का पानी: ${formatSignedMinutes(kuaNet)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  Text('💧 नहर का पानी: ${formatSignedMinutes(naharNet)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                ],
               ],
             ),
           ),
@@ -421,25 +427,23 @@ class _KhetScreenState extends State<KhetScreen> {
 
   Future<void> _shareNet(Map<String, dynamic> contact) async {
     final rows = _personWaterRows(contact['id']);
-    final balances = <String, int>{'Solar': 0, 'Diesel': 0};
+    final balances = <String, int>{'Solar': 0, 'Diesel': 0, 'Kua': 0, 'Nahar': 0};
     for (final row in rows) {
-      final well = (row['wellType'] ?? 'Solar').toString();
+      final source = (row['settlementMode'] == 'WATER' ? (row['waterExchangeType'] ?? 'Kua') : (row['wellType'] ?? 'Solar')).toString();
       final minutes = (row['minutes'] as num?)?.toInt() ?? 0;
-      final delta = row['direction'] == 'Diya'
-          ? minutes
-          : row['direction'] == 'Liya'
-              ? -minutes
-              : 0;
-      balances[well] = (balances[well] ?? 0) + delta;
+      final delta = row['direction'] == 'Diya' ? minutes : row['direction'] == 'Liya' ? -minutes : 0;
+      balances[source] = (balances[source] ?? 0) + delta;
     }
-    final totalNet = balances.values.fold<int>(0, (sum, value) => sum + value);
+    final totalNet = balances['Solar']! + balances['Diesel']!;
     await KhataSharingService.share(
       phone: contact['phone'] as String?,
       text: [
         'Pani Net Hisab - ${_storage.senderName}',
-        'Solar Kua: ${formatSignedMinutes(balances['Solar'] ?? 0)}',
-        'Diesel Kua: ${formatSignedMinutes(balances['Diesel'] ?? 0)}',
-        'TOTAL NET: ${formatSignedMinutes(totalNet)}',
+        'पैसों वाला पानी — Solar: ${formatSignedMinutes(balances['Solar'] ?? 0)}',
+        'पैसों वाला पानी — Diesel: ${formatSignedMinutes(balances['Diesel'] ?? 0)}',
+        'बदले में पानी — कुआँ: ${formatSignedMinutes(balances['Kua'] ?? 0)}',
+        'बदले में पानी — नहर: ${formatSignedMinutes(balances['Nahar'] ?? 0)}',
+        'Money-water NET: ${formatSignedMinutes(totalNet)}',
       ].join('\n'),
     );
   }
@@ -918,6 +922,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   Map<String, int> _selectedPlots = {};
   String _source = 'Tubewell';
   String _wellType = 'Solar';
+  String _settlementMode = 'MONEY';
+  String _waterExchangeType = 'Kua';
   bool _borrowedWater = false;
   String _direction = 'Diya';
   String _season = 'Rabi';
@@ -1175,6 +1181,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         baseRecord.addAll({
           'ledgerMode': 'PERSON',
           'wellType': _wellType,
+          'settlementMode': _settlementMode,
+          'waterExchangeType': _settlementMode == 'WATER' ? _waterExchangeType : null,
         });
         await _storage.addRecord('khet', baseRecord);
       }
@@ -1285,6 +1293,27 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
             const SizedBox(height: 8),
             Text('Total: ' + formatMinutes((int.tryParse(_ownMinutes.text.trim()) ?? 0) + (_borrowedWater ? _previewBorrowedMinutes : 0))),
           ] else ...[
+            DropdownButtonFormField<String>(
+              initialValue: _settlementMode,
+              decoration: const InputDecoration(labelText: 'हिसाब किस तरह होगा?'),
+              items: const [
+                DropdownMenuItem(value: 'MONEY', child: Text('💰 पैसों में हिसाब')),
+                DropdownMenuItem(value: 'WATER', child: Text('💧 पैसे की बात नहीं — बदले में पानी')),
+              ],
+              onChanged: (value) => setState(() => _settlementMode = value ?? _settlementMode),
+            ),
+            const SizedBox(height: 12),
+            if (_settlementMode == 'WATER')
+              DropdownButtonFormField<String>(
+                initialValue: _waterExchangeType,
+                decoration: const InputDecoration(labelText: 'बदले में कौन सा पानी लेना/देना है?'),
+                items: const [
+                  DropdownMenuItem(value: 'Kua', child: Text('कुएँ का पानी')),
+                  DropdownMenuItem(value: 'Nahar', child: Text('नहर का पानी')),
+                ],
+                onChanged: (value) => setState(() => _waterExchangeType = value ?? _waterExchangeType),
+              ),
+            if (_settlementMode == 'WATER') const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _wellType,
               decoration: const InputDecoration(labelText: 'किस कुएँ से पानी दिया/लिया?'),
