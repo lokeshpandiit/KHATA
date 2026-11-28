@@ -6,8 +6,12 @@ import '../services/farm_reminder_service.dart';
 import '../widgets/khet_map_widget.dart';
 import '../widgets/plot_selector.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+  @override State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
 
   double _amount(dynamic value) {
     if (value is num) return value.toDouble();
@@ -42,13 +46,21 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  String? _selectedMonth;
+  String _monthKey(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}';
+
   Widget _buildDashboard(BuildContext context, StorageBackupService storage) {
     final hisabs = storage.records('hisabs');
     final khet = storage.records('khet');
     final now = DateTime.now();
+    final monthKeys = <String>{_monthKey(now), ...hisabs.map(_date).whereType<DateTime>().map(_monthKey), ...khet.map(_date).whereType<DateTime>().map(_monthKey)}.toList()..sort((a,b)=>b.compareTo(a));
+    if (_selectedMonth == null) _selectedMonth = _monthKey(now);
+    if (!monthKeys.contains(_selectedMonth)) _selectedMonth = monthKeys.first;
+    final selectedParts = _selectedMonth!.split('-');
+    final selectedDate = DateTime(int.parse(selectedParts[0]), int.parse(selectedParts[1]));
     bool thisMonth(Map<String, dynamic> row) {
       final date = _date(row);
-      return date != null && date.year == now.year && date.month == now.month;
+      return date != null && _monthKey(date) == _selectedMonth;
     }
     final monthHisabAmount = hisabs.where(thisMonth).fold<double>(
       0, (sum, row) => sum + _amount(row['amount']),
@@ -59,7 +71,7 @@ class DashboardScreen extends StatelessWidget {
     final monthPani = khet.where(thisMonth)
         .where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON')
         .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
-    final pending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0).toList()
+    final pending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0 && thisMonth(row)).toList()
       ..sort((a, b) => (DateTime.tryParse(a['dueDate'] as String? ?? '') ?? DateTime(9999))
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '') ?? DateTime(9999)));
     final pendingTotal = pending.fold<double>(0, (sum, row) => sum + _balance(row));
@@ -72,13 +84,31 @@ class DashboardScreen extends StatelessWidget {
         const SizedBox(height: 4),
         Text(DateFormat('EEEE, dd MMMM yyyy').format(now), style: const TextStyle(color: Colors.black54)),
         const SizedBox(height: 14),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                isExpanded: true,
+                value: _selectedMonth,
+                items: monthKeys.map((key) {
+                  final parts = key.split('-');
+                  final date = DateTime(int.parse(parts[0]), int.parse(parts[1]));
+                  return DropdownMenuItem(value: key, child: Text(DateFormat('MMMM yyyy').format(date)));
+                }).toList(),
+                onChanged: (value) => setState(() => _selectedMonth = value),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
         const KhetMapWidget(),
         const SizedBox(height: 18),
         Row(children: [
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _PendingPaymentsScreen(rows: pending, waterRows: khet.where((r) => r['type'] == 'PANI' && r['waterPaymentPending'] == true).toList(), money: money, storage: storage),
+              builder: (_) => _PendingPaymentsScreen(rows: pending, waterRows: khet.where((r) => r['type'] == 'PANI' && r['waterPaymentPending'] == true && thisMonth(r)).toList(), money: money, storage: storage, monthTitle: DateFormat('MMMM yyyy').format(selectedDate)),
             )),
             child: _MetricCard(title: 'Pending payments', value: money.format(pendingTotal), icon: Icons.pending_actions, tint: const Color(0xFFE5F2EC)),
           )),
@@ -86,19 +116,19 @@ class DashboardScreen extends StatelessWidget {
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _MonthPersonLedgerScreen(rows: hisabs.where(thisMonth).toList()),
+              builder: (_) => _MonthPersonLedgerScreen(rows: hisabs.where(thisMonth).toList(), monthTitle: DateFormat('MMMM yyyy').format(selectedDate)),
             )),
-            child: _MetricCard(title: 'This month Hisab', value: money.format(monthHisabAmount), icon: Icons.receipt_long, tint: const Color(0xFFEAF0FA)),
+            child: _MetricCard(title: '${DateFormat('MMMM yyyy').format(selectedDate)} Hisab', value: money.format(monthHisabAmount), icon: Icons.receipt_long, tint: const Color(0xFFEAF0FA)),
           )),
         ]),
         const SizedBox(height: 10),
         Row(children: [
-          Expanded(child: InkWell(onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => _KhetExpensesScreen(rows: khet, money: money))), child: _MetricCard(title: 'Khet expenses', value: money.format(monthKhetAmount), icon: Icons.agriculture, tint: const Color(0xFFF8EEDC)))),
+          Expanded(child: InkWell(onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => _KhetExpensesScreen(rows: khet, money: money, initialMonth: _selectedMonth))), child: _MetricCard(title: 'Khet expenses', value: money.format(monthKhetAmount), icon: Icons.agriculture, tint: const Color(0xFFF8EEDC)))),
           const SizedBox(width: 10),
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _MonthPaniScreen(rows: khet.where((row) => thisMonth(row) && row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON').toList(), storage: storage),
+              builder: (_) => _MonthPaniScreen(rows: khet.where((row) => thisMonth(row) && row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON').toList(), storage: storage, monthTitle: DateFormat('MMMM yyyy').format(selectedDate)),
             )),
             child: _MetricCard(title: 'Pani total', value: '${monthPani ~/ 60}h ${monthPani % 60}m', icon: Icons.water_drop, tint: const Color(0xFFE7F3FA)),
           )),
@@ -129,8 +159,9 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _MonthPersonLedgerScreen extends StatelessWidget {
-  const _MonthPersonLedgerScreen({required this.rows});
+  const _MonthPersonLedgerScreen({required this.rows, required this.monthTitle});
   final List<Map<String, dynamic>> rows;
+  final String monthTitle;
 
   double _amount(dynamic value) => value is num ? value.toDouble() :
       double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
@@ -152,7 +183,7 @@ class _MonthPersonLedgerScreen extends StatelessWidget {
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
     final sorted = people.keys.toList()..sort();
     return Scaffold(
-      appBar: AppBar(title: const Text('This month · Person Hisab')),
+      appBar: AppBar(title: Text('$monthTitle · Person Hisab')),
       body: sorted.isEmpty
           ? const Center(child: Text('Is month person-to-person Len-Den entries nahi hain.'))
           : ListView(padding: const EdgeInsets.all(16), children: sorted.map((name) {
@@ -178,9 +209,10 @@ class _MonthPersonLedgerScreen extends StatelessWidget {
 
 
 class _MonthPaniScreen extends StatelessWidget {
-  const _MonthPaniScreen({required this.rows, required this.storage});
+  const _MonthPaniScreen({required this.rows, required this.storage, required this.monthTitle});
   final List<Map<String, dynamic>> rows;
   final StorageBackupService storage;
+  final String monthTitle;
 
   int _num(Map<String, dynamic> row, String key) {
     final v = row[key];
@@ -221,7 +253,7 @@ class _MonthPaniScreen extends StatelessWidget {
     final kuaTotal = kuaRows.fold<int>(0, (s,r)=>s+_borrowedKua(r));
     final borrowedTotal = naharTotal+kuaTotal;
     return Scaffold(
-      appBar: AppBar(title: const Text('This month · Pani total')),
+      appBar: AppBar(title: Text('$monthTitle · Pani total')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         const Text('PANI TOTAL', style: TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
         Card(child: ListTile(
@@ -348,7 +380,7 @@ class _KhetExpensesScreenState extends State<_KhetExpensesScreen>{
   final expenses=widget.rows.where((r)=>r['type']!='PANI'&&r['type']!='TRACTOR').toList();
   double amount(dynamic v)=>v is num?v.toDouble():double.tryParse(v?.toString()??'')??0;
   final monthKeys=expenses.map((r)=>DateTime.tryParse(r['date']?.toString()??'')).whereType<DateTime>().map(_monthKey).toSet().toList()..sort((a,b)=>b.compareTo(a));
-  if(_selectedMonth==null && monthKeys.isNotEmpty)_selectedMonth=monthKeys.first;
+  if(_selectedMonth==null && monthKeys.isNotEmpty)_selectedMonth=widget.initialMonth ?? monthKeys.first;
   if(_selectedMonth!=null && !monthKeys.contains(_selectedMonth))_selectedMonth=monthKeys.isNotEmpty?monthKeys.first:null;
   final selected=_selectedMonth;
   final monthly=expenses.where((r){final d=DateTime.tryParse(r['date']?.toString()??'');return d!=null && _monthKey(d)==selected;}).toList()..sort((a,b)=>(DateTime.tryParse(b['date']?.toString()??'')??DateTime(0)).compareTo(DateTime.tryParse(a['date']?.toString()??'')??DateTime(0)));
