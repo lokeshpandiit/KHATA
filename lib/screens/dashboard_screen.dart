@@ -424,6 +424,12 @@ class _PersonMonthDetailScreen extends StatelessWidget {
     final sorted = [...rows]..sort((a, b) =>
       (DateTime.tryParse((a['date'] ?? a['invoiceDate'] ?? '').toString()) ?? DateTime(0))
         .compareTo(DateTime.tryParse((b['date'] ?? b['invoiceDate'] ?? '').toString()) ?? DateTime(0)));
+    final runningBalances = <String, double>{};
+    double running = 0;
+    for (final row in sorted) {
+      running += _delta(row);
+      runningBalances[(row['id'] ?? '${row['date']}-${row['title']}').toString()] = running;
+    }
     final net = sorted.fold<double>(0, (sum, row) => sum + _delta(row));
     final currentMonthRows = sorted.where((row) {
       final date = DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString());
@@ -475,7 +481,7 @@ class _PersonMonthDetailScreen extends StatelessWidget {
                       : Icons.call_received,
             ),
             title: Text(_title(row)),
-            subtitle: Text(_subtitle(row, money)),
+            subtitle: Text('${_subtitle(row, money)}\\nBalance after: ${((runningBalances[(row['id'] ?? '${row['date']}-${row['title']}').toString()] ?? 0) >= 0 ? '₹${money.format((runningBalances[(row['id'] ?? '${row['date']}-${row['title']}').toString()] ?? 0).abs())} lena baki' : '₹${money.format((runningBalances[(row['id'] ?? '${row['date']}-${row['title']}').toString()] ?? 0).abs())} dena baki'}'),
             trailing: Text(
               delta.abs() < 0.009 ? '₹0' : '${delta > 0 ? '+' : '−'}${money.format(delta.abs())}',
               style: TextStyle(fontWeight: FontWeight.w800, color: delta > 0 ? Colors.green : delta < 0 ? Colors.red : Colors.black54),
@@ -891,7 +897,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     if (saved != true) { noteController.dispose(); minutesController.dispose(); return; }
     final updated = Map<String, dynamic>.from(row);
     final history = row['waterExchangeHistory'] is List ? List<Map<String, dynamic>>.from((row['waterExchangeHistory'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e))) : <Map<String, dynamic>>[];
-    if (status == 'WATER_EXCHANGE') history.add({'minutes': int.parse(minutesController.text.trim()), 'date': exchangeDate.toIso8601String(), 'note': noteController.text.trim()});
+    if (status == 'WATER_EXCHANGE') { final minutes = int.parse(minutesController.text.trim()); final before = (owed - totalExchanged).clamp(0, 999999); history.add({'minutes': minutes, 'date': exchangeDate.toIso8601String(), 'note': noteController.text.trim(), 'balanceBefore': before, 'balanceAfter': (before - minutes).clamp(0, 999999)}); }
     final totalExchanged = history.fold<int>(0, (sum, e) => sum + _amount(e['minutes']).toInt());
     final left = (owed - totalExchanged).clamp(0, 999999);
     updated
