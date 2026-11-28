@@ -285,14 +285,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: _MetricCard(title: 'Pani total', value: '${monthPani ~/ 60}h ${monthPani % 60}m', icon: Icons.water_drop, tint: const Color(0xFFE7F3FA)),
           )),
         ]),
-        const SizedBox(height: 8),
-        Card(child: ListTile(
-          leading: const CircleAvatar(child: Icon(Icons.storefront_outlined)),
-          title: Text('${DateFormat('MMMM yyyy').format(selectedDate)} · Dawai/Khaad purchases'),
-          subtitle: Text('Bought ${money.format(monthVendorTotal)} · Paid ${money.format(monthVendorPaid)} · Pending ${money.format(monthVendorPending)}'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _MonthVendorPurchasesScreen(rows: vendorPurchases, allRows: khet, monthTitle: DateFormat('MMMM yyyy').format(selectedDate), money: money))),
-        )),
       ],
     );
   }
