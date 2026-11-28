@@ -106,7 +106,7 @@ class _HisabScreenState extends State<HisabScreen> {
       if (row['entryType'] == 'EXPENSE') 'Killa / Field: ${_expensePlotSummary(row)}',
       if ((row['amount'] as String? ?? '').isNotEmpty) 'Amount: ${row['direction'] == 'PAID' ? '−' : '+'}₹${row['amount']}',
       if (row['category'] == 'Len-Den' || row['category'] == 'Studio') 'Type: $direction',
-      if ((row['note'] as String? ?? '').isNotEmpty) 'Note: ${row['note']}',
+      if ((row['note'] as String? ?? '').isNotEmpty) 'Note: ${cleanDisplayText(row['note'])}',
       if (date != null) 'Date: ${dateLabel(date)}',
     ].join('\n');
     final photos = mode == 'images' || mode == 'all' ? _photos(row) : <String>[];
@@ -338,7 +338,7 @@ class _HisabScreenState extends State<HisabScreen> {
             })),
           ],
           if ((row['note'] as String? ?? '').isNotEmpty) ...[
-            const SizedBox(height: 7), Text(row['note'] as String),
+            const SizedBox(height: 7), Text(cleanDisplayText(row['note'])),
           ],
           if (photos.isNotEmpty) ...[
             const SizedBox(height: 9),
