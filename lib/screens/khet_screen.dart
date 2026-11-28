@@ -532,7 +532,7 @@ class _KhetScreenState extends State<KhetScreen> {
       ..['status'] = balance <= 0 ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING')
       ..['payments'] = [
         ...(row['payments'] as List? ?? const []),
-        {'amount': amount, 'direction': direction, 'date': DateTime.now().toIso8601String()},
+        {'amount': amount, 'direction': direction, 'date': DateTime.now().toIso8601String(), 'balanceBefore': (total - oldPaid).clamp(0, double.infinity), 'balanceAfter': balance},
       ]
       ..['updatedAt'] = DateTime.now().toIso8601String();
     await _storage.updateRecord('khet', row['id'] as String, updated);
