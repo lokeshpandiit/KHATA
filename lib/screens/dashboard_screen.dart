@@ -1159,12 +1159,39 @@ class _KhetExpensesScreenState extends State<_KhetExpensesScreen> {
             'Pending ${widget.money.format(remainingById[(row['id'] ?? '').toString()] ?? (amount - paid).clamp(0, double.infinity).toDouble())}',
             if ((row['note'] ?? '').toString().trim().isNotEmpty) row['note'].toString().trim(),
           ];
+          final pendingAmount = remainingById[(row['id'] ?? '').toString()] ??
+              (amount - paid).clamp(0, double.infinity).toDouble();
           return Card(
             child: ListTile(
               leading: const CircleAvatar(child: Icon(Icons.agriculture_outlined)),
               title: Text('${_category(row)} · $title'),
               subtitle: Text(details.join(' · ')),
               trailing: Text(widget.money.format(amount), style: const TextStyle(fontWeight: FontWeight.w800)),
+              onTap: pendingAmount > 0.009 ? () {
+                if (row['type'] == 'KHET_PURCHASE') {
+                  Navigator.push(context, MaterialPageRoute<void>(builder: (_) =>
+                    KhetVendorLedgerDashboardScreen(
+                      vendorId: row['vendorId'].toString(),
+                      vendorName: (row['vendorName'] ?? 'Shop').toString(),
+                      rows: StorageBackupService.instance.records('khet'),
+                    )));
+                } else {
+                  final pendingRow = <String, dynamic>{
+                    ...row,
+                    'dashboardBalance': pendingAmount,
+                    'pendingKind': row['type'] == 'TRACTOR' ? 'TRACTOR' : 'KHET_EXPENSE',
+                    'pendingSource': row['entryType'] == 'EXPENSE' ? 'hisabs' : 'khet',
+                  };
+                  Navigator.push(context, MaterialPageRoute<void>(builder: (_) =>
+                    _PendingPaymentsScreen(
+                      rows: [pendingRow],
+                      waterRows: const [],
+                      money: widget.money,
+                      storage: StorageBackupService.instance,
+                      monthTitle: selected == null ? 'All months' : DateFormat('MMMM yyyy').format(DateTime(int.parse(selected.split('-')[0]), int.parse(selected.split('-')[1]))),
+                    )));
+                }
+              } : null,
             ),
           );
         }),
