@@ -877,10 +877,10 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     final saved = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
       title: Text('Pani pending · ${row['borrowedContact'] ?? row['contact'] ?? 'Person'}'),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Text('Total udhaar: $owed min\nBadle mein mila: $exchanged min\nBaki: $remaining min', style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text('${row['type'] == 'KUA' ? 'Humein is vyakti se pani lena hai' : 'Total udhaar'}: $owed min\nBadle mein mila: $exchanged min\nBaki: $remaining min\n${row['type'] == 'KUA' ? 'Kua: ${row['wellSelection'] ?? 'Solar'}' : ''}', style: const TextStyle(fontWeight: FontWeight.w600)),
         DropdownButtonFormField<String>(value: status, items: const [
           DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
-          DropdownMenuItem(value: 'PAID', child: Text('Payment mil gaya')),
+          if (row['type'] != 'KUA') DropdownMenuItem(value: 'PAID', child: Text('Payment mil gaya')),
           DropdownMenuItem(value: 'WATER_EXCHANGE', child: Text('Badle mein pani liya')),
         ], onChanged: (v) => setDialog(() { status = v ?? 'PENDING'; })),
         if (status == 'WATER_EXCHANGE') ...[
@@ -1164,14 +1164,14 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
           }),
           const SizedBox(height: 16),
           const Text('Pending Pani', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          ...widget.waterRows.where((row) => row['waterPaymentPending'] == true).map((row) {
+          ...widget.waterRows.where((row) => row['waterPaymentPending'] == true || (row['type'] == 'KUA' && _waterOwedMinutes(row) > _waterExchangedMinutes(row))).map((row) {
             final date = DateTime.tryParse(row['date']?.toString() ?? '');
             final mins = _waterOwedMinutes(row);
             final exchanged = _waterExchangedMinutes(row);
             final remaining = (mins - exchanged).clamp(0, 999999);
             final source = (row['borrowedSource'] ?? row['source'] ?? 'Pani').toString();
             return Card(child: ListTile(
-              title: Text('${row['borrowedContact'] ?? row['contact'] ?? 'Person'} · $source'),
+              title: Text('${row['type'] == 'KUA' ? (row['contact'] ?? 'Person') : (row['borrowedContact'] ?? row['contact'] ?? 'Person')} · ${row['type'] == 'KUA' ? 'Kua: ${row['wellSelection'] ?? 'Solar'}' : source}'),
               subtitle: Text('Udhaar: $mins min · Mila: $exchanged min · Baki: $remaining min\n${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}\n${(row['waterExchangeHistory'] as List? ?? const []).map((e) { final dt=DateTime.tryParse((e['date']??'').toString()); return '${dt==null?'':DateFormat('dd MMM yyyy').format(dt)}: ${e['minutes']} min liya · baki ${e['balanceAfter'] ?? ''} min'; }).join('\n')}\n${row['note'] ?? ''}'),
               trailing: const Icon(Icons.edit_note),
               onTap: () => _updateWaterStatus(row),
