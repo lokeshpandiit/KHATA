@@ -77,7 +77,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final vendorPurchases = khet.where((row) => row['type'] == 'KHET_PURCHASE' && thisMonth(row)).toList();
     final monthVendorTotal = vendorPurchases.fold<double>(0,(sum,row)=>sum+_amount(row['totalAmount']));
     final monthVendorPaid = vendorPurchases.fold<double>(0,(sum,row)=>sum+_amount(row['paidAmount']));
-    final monthVendorPending = vendorPurchases.fold<double>(0,(sum,row)=>sum+_amount(row['dashboardBalance']));
     final vendorIds = vendorPurchases.map((r)=>r['vendorId']).where((id)=>id!=null).toSet();
     final vendorPending = <Map<String,dynamic>>[];
     for(final vendorId in vendorIds){
@@ -97,6 +96,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ..sort((a,b)=>(DateTime.tryParse(a['dueDate'] as String? ?? '')??DateTime(9999))
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '')??DateTime(9999)));
     final pendingTotal=pending.fold<double>(0,(sum,row)=>sum+_balance(row));
+    final monthVendorPending = vendorPending.fold<double>(0,(sum,row)=>sum+_balance(row));
+    final monthVendorLaterPayments = khet.where((row)=>row['type']=='KHET_PURCHASE_PAYMENT'&&thisMonth(row)).fold<double>(0,(sum,row)=>sum+_amount(row['amount']));
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
     return ListView(
@@ -159,7 +160,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Card(child: ListTile(
           leading: const CircleAvatar(child: Icon(Icons.storefront_outlined)),
           title: Text('${DateFormat('MMMM yyyy').format(selectedDate)} · Dawai/Khaad purchases'),
-          subtitle: Text('Bought ${money.format(monthVendorTotal)} · Paid at purchase ${money.format(monthVendorPaid)} · Pending ${money.format(monthVendorPending)}'),
+          subtitle: Text('Bought ${money.format(monthVendorTotal)} · Paid ${money.format(monthVendorPaid+monthVendorLaterPayments)} · Pending ${money.format(monthVendorPending)}'),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _MonthVendorPurchasesScreen(rows: vendorPurchases, allRows: khet, monthTitle: DateFormat('MMMM yyyy').format(selectedDate), money: money))),
         )),
