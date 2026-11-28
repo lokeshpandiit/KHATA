@@ -336,17 +336,28 @@ class _PersonMonthDetailScreen extends StatelessWidget {
   }
 }
 
-class _KhetExpensesScreen extends StatelessWidget {
+class _KhetExpensesScreen extends StatefulWidget {
  const _KhetExpensesScreen({required this.rows,required this.money});
  final List<Map<String,dynamic>> rows; final NumberFormat money;
+ @override State<_KhetExpensesScreen> createState()=>_KhetExpensesScreenState();
+}
+class _KhetExpensesScreenState extends State<_KhetExpensesScreen>{
+ String? _selectedMonth;
+ String _monthKey(DateTime d)=>'${d.year}-${d.month.toString().padLeft(2,'0')}';
  @override Widget build(BuildContext context){
-  final expenses=rows.where((r)=>r['type']!='PANI'&&r['type']!='TRACTOR').toList();
+  final expenses=widget.rows.where((r)=>r['type']!='PANI'&&r['type']!='TRACTOR').toList();
   double amount(dynamic v)=>v is num?v.toDouble():double.tryParse(v?.toString()??'')??0;
-  final total=expenses.fold<double>(0,(s,r)=>s+amount(r['price']));
+  final monthKeys=expenses.map((r)=>DateTime.tryParse(r['date']?.toString()??'')).whereType<DateTime>().map(_monthKey).toSet().toList()..sort((a,b)=>b.compareTo(a));
+  if(_selectedMonth==null && monthKeys.isNotEmpty)_selectedMonth=monthKeys.first;
+  if(_selectedMonth!=null && !monthKeys.contains(_selectedMonth))_selectedMonth=monthKeys.isNotEmpty?monthKeys.first:null;
+  final selected=_selectedMonth;
+  final monthly=expenses.where((r){final d=DateTime.tryParse(r['date']?.toString()??'');return d!=null && _monthKey(d)==selected;}).toList()..sort((a,b)=>(DateTime.tryParse(b['date']?.toString()??'')??DateTime(0)).compareTo(DateTime.tryParse(a['date']?.toString()??'')??DateTime(0)));
+  final total=monthly.fold<double>(0,(s,r)=>s+amount(r['price']));
   return Scaffold(appBar:AppBar(title:const Text('All Khet Expenses')),body:ListView(padding:const EdgeInsets.all(16),children:[
-   Card(child:ListTile(title:Text('${expenses.length} expense records'),trailing:Text(money.format(total),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18)))),
-   if(expenses.isEmpty)const Center(child:Padding(padding:EdgeInsets.all(30),child:Text('Koi expense record nahi hai.'))),
-   ...expenses.map((r){final d=DateTime.tryParse(r['date']?.toString()??'');return Card(child:ListTile(title:Text(r['type']?.toString()??'Expense'),subtitle:Text('${r['description']??r['name']??''}${d==null?'':'\n'+DateFormat('dd MMM yyyy').format(d)}'),trailing:Text(money.format(amount(r['price'])))));})
+   if(monthKeys.isNotEmpty) Card(child:Padding(padding:const EdgeInsets.symmetric(horizontal:12,vertical:8),child:DropdownButtonHideUnderline(child:DropdownButton<String>(isExpanded:true,value:selected,hint:const Text('Month choose karein'),items:monthKeys.map((key){final parts=key.split('-');final date=DateTime(int.parse(parts[0]),int.parse(parts[1]));return DropdownMenuItem(value:key,child:Text(DateFormat('MMMM yyyy').format(date)));}).toList(),onChanged:(v)=>setState(()=>_selectedMonth=v)))),
+   Card(child:ListTile(title:Text('${DateFormat('MMMM yyyy').format(DateTime(int.parse(selected?.split('-')[0]??'2000'),int.parse(selected?.split('-')[1]??'1')))} · ${monthly.length} expense records'),trailing:Text(widget.money.format(total),style:const TextStyle(fontWeight:FontWeight.bold,fontSize:18)))),
+   if(monthly.isEmpty)const Center(child:Padding(padding:EdgeInsets.all(30),child:Text('Is month ka koi expense record nahi hai.'))),
+   ...monthly.map((r){final d=DateTime.tryParse(r['date']?.toString()??'');return Card(child:ListTile(title:Text(r['type']?.toString()??'Expense'),subtitle:Text('${r['description']??r['name']??''}${d==null?'':'\n'+DateFormat('dd MMM yyyy').format(d)}'),trailing:Text(widget.money.format(amount(r['price'])))));})
   ]));
  }
 }
