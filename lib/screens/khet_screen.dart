@@ -930,10 +930,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   String? _activeCropCycleId(String plotId, DateTime onDate) {
     final activityDay = DateUtils.dateOnly(onDate);
     final crops = _storage.records('khet').where((row) {
-      if (row['type'] != 'FASAL' ||
-          row['plotId'] != plotId ||
-          row['harvested'] == true ||
-          row['cropCycleStatus'] == 'COMPLETED') {
+      if (row['type'] != 'FASAL' || row['plotId'] != plotId) {
         return false;
       }
       final sowingDate = DateTime.tryParse(
@@ -943,6 +940,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         return false;
       }
       final harvestDate = DateTime.tryParse((row['harvestDate'] ?? '').toString());
+      final completed = row['harvested'] == true || row['cropCycleStatus'] == 'COMPLETED';
+      if (completed && harvestDate == null) return false;
       return harvestDate == null ||
           !activityDay.isAfter(DateUtils.dateOnly(harvestDate));
     }).toList();
@@ -1320,10 +1319,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
         DateTime.tryParse((row['sowingDate'] ?? row['date'] ?? '').toString());
 
     final crops = _storage.records('khet').where((row) {
-      if (row['type'] != 'FASAL' ||
-          row['plotId'] != plotId ||
-          row['harvested'] == true ||
-          row['cropCycleStatus'] == 'COMPLETED') {
+      if (row['type'] != 'FASAL' || row['plotId'] != plotId) {
         return false;
       }
       final sowing = sowingDate(row);
@@ -1331,6 +1327,8 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
         return false;
       }
       final harvest = DateTime.tryParse((row['harvestDate'] ?? '').toString());
+      final completed = row['harvested'] == true || row['cropCycleStatus'] == 'COMPLETED';
+      if (completed && harvest == null) return false;
       return harvest == null ||
           !applicationDay.isAfter(DateUtils.dateOnly(harvest));
     }).toList()
