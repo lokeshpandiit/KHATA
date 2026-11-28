@@ -1231,6 +1231,8 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
   }
 
   double _balance(Map<String, dynamic> row) {
+    final dashboardBalance = row['dashboardBalance'];
+    if (dashboardBalance is num) return dashboardBalance.toDouble();
     final explicit = row['balance'];
     if (explicit is num) return explicit.toDouble();
     return (_amount(row['totalAmount'] ?? row['price']) -
@@ -1354,7 +1356,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     final original = source.first;
     final total = _amount(original['totalAmount'] ?? original['amount'] ?? original['price']);
     final paid = _amount(original['paidAmount']);
-    final before = (total - paid).clamp(0, double.infinity).toDouble();
+    final before = _amount(pendingRow['dashboardBalance'] ?? (total - paid)).clamp(0, double.infinity).toDouble();
     final amountController = TextEditingController();
     final noteController = TextEditingController();
     String direction = 'Diya';
@@ -1419,7 +1421,8 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     final amount = (result['amount'] as num).toDouble();
     direction = result['direction'] as String;
     final newPaid = direction == 'Diya' ? paid + amount : (paid - amount).clamp(0, double.infinity).toDouble();
-    final after = (total - newPaid).clamp(0, double.infinity).toDouble();
+    final storedAfter = (total - newPaid).clamp(0, double.infinity).toDouble();
+    final after = (before - (direction == 'Diya' ? amount : -amount)).clamp(0, double.infinity).toDouble();
     final history = oldHistory..add({
       'amount': amount,
       'direction': direction,
@@ -1431,8 +1434,8 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     final updated = Map<String, dynamic>.from(original)
       ..['paidAmount'] = newPaid
       ..['payments'] = history
-      ..['balance'] = after
-      ..['paymentStatus'] = after <= 0.009 ? 'PAID' : (newPaid > 0 ? 'PARTIAL' : 'PENDING')
+      ..['balance'] = storedAfter
+      ..['paymentStatus'] = storedAfter <= 0.009 ? 'PAID' : (newPaid > 0 ? 'PARTIAL' : 'PENDING')
       ..['updatedAt'] = DateTime.now().toIso8601String();
     await widget.storage.updateRecord(sourceTable, original['id'].toString(), updated);
     final index = widget.rows.indexWhere((r) => r['id']?.toString() == original['id']?.toString());
