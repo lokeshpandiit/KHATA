@@ -34,15 +34,38 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   List<_Item> _items() {
     final all = <_Item>[];
+    void addPaymentRows(Map<String, dynamic> r, String type, String baseTitle) {
+      final payments = r['payments'];
+      if (payments is! List) return;
+      for (final p in payments.whereType<Map>()) {
+        final paymentDate = DateTime.tryParse((p['date'] ?? '').toString()) ?? DateTime.now();
+        final amount = p['amount'];
+        final direction = _str(p['direction']);
+        final note = _str(p['note']);
+        final balance = p['balanceAfter'];
+        all.add(_Item(type, 'Payment · $baseTitle', [
+          direction, if (amount != null && amount.toString().isNotEmpty) '₹$amount',
+          if (balance != null) 'Remaining ₹$balance', if (note.isNotEmpty) note,
+        ].where((s)=>s.isNotEmpty).join(' · '), paymentDate));
+      }
+    }
     for (final r in _storage.records('hisabs')) {
-      all.add(_Item('HISAB', _str(r['title']).isEmpty ? _str(r['category']) : _str(r['title']),
+      final title = _str(r['title']).isEmpty ? _str(r['category']) : _str(r['title']);
+      all.add(_Item('HISAB', title,
         [_str(r['category']), if (_str(r['amount']).isNotEmpty) '₹${r['amount']}', _str(r['note'])].where((s)=>s.isNotEmpty).join(' · '), _date(r)));
+      addPaymentRows(r, 'HISAB', title);
+      // Standalone/person payments are themselves history transactions.
+      if (r['entryType'] == 'PAYMENT' || r['paymentKind'] == 'PERSON_PAYMENT') {
+        all.add(_Item('HISAB', title, [_str(r['direction']), if (_str(r['amount']).isNotEmpty) '₹${r['amount']}', _str(r['note'])].where((s)=>s.isNotEmpty).join(' · '), _date(r)));
+      }
     }
     for (final r in _storage.records('khet')) {
       final water = r.containsKey('source') || r.containsKey('minutes') || r.containsKey('direction');
-      all.add(_Item(water ? 'PANI' : 'KHET',
-        water ? '${_str(r['contact']).isEmpty ? 'Pani' : _str(r['contact'])} · ${_str(r['source'])}' : (_str(r['title']).isEmpty ? _str(r['type']) : _str(r['title'])),
+      final type = water ? 'PANI' : 'KHET';
+      final title = water ? '${_str(r['contact']).isEmpty ? 'Pani' : _str(r['contact'])} · ${_str(r['source'])}' : (_str(r['title']).isEmpty ? _str(r['type']) : _str(r['title']));
+      all.add(_Item(type, title,
         water ? '${_str(r['direction'])} · ${_minutes(r['minutes'])}' : [_str(r['type']), if (_str(r['price']).isNotEmpty) '₹${r['price']}', _str(r['note'])].where((s)=>s.isNotEmpty).join(' · '), _date(r)));
+      addPaymentRows(r, type, title);
     }
     for (final r in _storage.records('members')) {
       final docs = (r['documents'] as List? ?? []).length;
