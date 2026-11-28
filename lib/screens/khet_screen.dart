@@ -1547,7 +1547,10 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
       _error(widget.type == 'FASAL' ? 'Fasal ka naam likhein' : widget.type == 'DAWAI' ? 'Dawai ka naam likhein' : widget.type == 'KHAD' ? 'Khaad ka naam likhein' : 'Naam likhein');
       return;
     }
-    if (widget.type == 'DAWAI' && !_khalaOnly && _plotId == null) {\n      _error('Killa select karein');\n      return;\n    }\n    if (_needsFarmDetails && _selectedPlots.isEmpty) {
+    if (widget.type == 'DAWAI' && !_khalaOnly && _plotId == null) {
+      _error('Killa select karein');
+      return;
+    }\n    if (_needsFarmDetails && _selectedPlots.isEmpty) {
       _error('Kam se kam ek killa select karein');
       return;
     }
