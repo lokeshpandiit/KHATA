@@ -121,17 +121,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if(balance>0&&thisMonth(purchase))vendorPending.add({...purchase,'dashboardBalance':balance,'pendingKind':'PURCHASE'});
       }
     }
-    final khetExpensePending = hisabs
-        .where((row) => row['category'] == 'Khet' && row['entryType'] == 'EXPENSE' && thisMonth(row))
-        .map((row) {
-          final total = _amount(row['totalAmount'] ?? row['amount']);
-          final paid = _amount(row['paidAmount']);
-          return <String, dynamic>{
-            ...row,
-            'dashboardBalance': (total - paid).clamp(0, double.infinity).toDouble(),
+    final khetExpensePending = <Map<String, dynamic>>[];
+    final expensesByPerson = <String, List<Map<String, dynamic>>>{};
+    for (final expense in hisabs.where((row) =>
+        row['category'] == 'Khet' && row['entryType'] == 'EXPENSE')) {
+      final person = (expense['personName'] ?? '').toString().trim().toLowerCase();
+      if (person.isEmpty) continue;
+      expensesByPerson.putIfAbsent(person, () => []).add(expense);
+    }
+    for (final entry in expensesByPerson.entries) {
+      final personPayments = hisabs.where((row) =>
+          (row['personName'] ?? '').toString().trim().toLowerCase() == entry.key &&
+          row['direction'] == 'PAID' &&
+          row['entryType'] != 'EXPENSE').fold<double>(
+        0, (sum, row) => sum + _amount(row['amount']),
+      );
+      var availablePayments = personPayments;
+      final expenses = entry.value
+        ..sort((a, b) => (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
+      for (final expense in expenses) {
+        final total = _amount(expense['totalAmount'] ?? expense['amount']);
+        final initiallyPaid = _amount(expense['paidAmount']);
+        final unpaid = (total - initiallyPaid).clamp(0, double.infinity).toDouble();
+        final applied = availablePayments < unpaid ? availablePayments : unpaid;
+        availablePayments -= applied;
+        final remaining = unpaid - applied;
+        if (remaining > 0.009 && thisMonth(expense)) {
+          khetExpensePending.add({
+            ...expense,
+            'dashboardBalance': remaining,
             'pendingKind': 'KHET_EXPENSE',
-          };
-        }).where((row) => _balance(row) > 0).toList();
+          });
+        }
+      }
+    }
     final pending=[...tractorPending,...vendorPending,...khetExpensePending]
       ..sort((a,b)=>(DateTime.tryParse(a['dueDate'] as String? ?? '')??DateTime(9999))
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '')??DateTime(9999)));
@@ -591,7 +614,11 @@ class _KhetExpensesScreenState extends State<_KhetExpensesScreen> {
       _amount(row['totalAmount'] ?? row['amount'] ?? row['price']);
 
   String _category(Map<String, dynamic> row) {
-    if (row['expenseCategory'] != null) return row['expenseCategory'].toString();
+    if (row['expenseCategory'] != null) {
+      final category = row['expenseCategory'].toString();
+      final work = (row['workType'] ?? '').toString().trim();
+      return category == 'Tractor' && work.isNotEmpty ? 'Tractor · $work' : category;
+    }
     if (row['purchaseCategory'] != null) return row['purchaseCategory'].toString();
     if (row['type'] == 'TRACTOR') return 'Tractor';
     if (row['type'] == 'DAWAI') return 'Dawai';
