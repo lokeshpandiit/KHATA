@@ -1,0 +1,113 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:khata/services/history_projection.dart';
+
+void main() {
+  group('HistoryProjection', () {
+    test('keeps original record date when a later payment updates the record', () {
+      final entries = HistoryProjection.build(
+        hisabs: [
+          {
+            'id': 'bill-1',
+            'title': 'Fertilizer',
+            'category': 'Khet',
+            'amount': '50000',
+            'date': '2026-11-27T10:00:00',
+            'updatedAt': '2026-11-30T14:00:00',
+            'payments': [
+              {
+                'amount': 20000,
+                'direction': 'Diya',
+                'date': '2026-11-28T12:00:00',
+                'balanceAfter': 30000,
+              },
+            ],
+          },
+        ],
+        khet: const [],
+        members: const [],
+        products: const [],
+      );
+
+      final original = entries.singleWhere((entry) => entry.title == 'Fertilizer');
+      final payment = entries.singleWhere((entry) => entry.title == 'Payment · Fertilizer');
+      expect(original.date, DateTime(2026, 11, 27, 10));
+      expect(payment.date, DateTime(2026, 11, 28, 12));
+      expect(payment.subtitle, contains('₹20000'));
+      expect(payment.subtitle, contains('Remaining ₹30000'));
+    });
+
+    test('shows person-to-person payments with person, amount and saved date once', () {
+      final entries = HistoryProjection.build(
+        hisabs: [
+          {
+            'id': 'person-payment-1',
+            'title': 'Person payment · Paise liye',
+            'paymentKind': 'PERSON_PAYMENT',
+            'entryType': 'PAYMENT',
+            'personName': 'Abhi',
+            'category': 'Khet',
+            'direction': 'RECEIVED',
+            'amount': '30000',
+            'balanceAfter': 10000,
+            'date': '2026-11-28T19:40:00',
+          },
+        ],
+        khet: const [],
+        members: const [],
+        products: const [],
+      );
+
+      expect(entries, hasLength(1));
+      expect(entries.single.title, contains('Abhi'));
+      expect(entries.single.title, contains('आपको पैसे मिले'));
+      expect(entries.single.subtitle, contains('₹30000'));
+      expect(entries.single.date, DateTime(2026, 11, 28, 19, 40));
+    });
+
+    test('classifies purchase payments as KHET and shows absolute paid amount', () {
+      final entries = HistoryProjection.build(
+        hisabs: const [],
+        khet: [
+          {
+            'id': 'vendor-payment-1',
+            'type': 'KHET_PURCHASE_PAYMENT',
+            'vendorName': 'Shop',
+            'direction': 'Diya',
+            'amount': 1500,
+            'balanceAfter': 3500,
+            'date': '2026-11-28T15:00:00',
+          },
+        ],
+        members: const [],
+        products: const [],
+      );
+
+      expect(entries, hasLength(1));
+      expect(entries.single.type, 'KHET');
+      expect(entries.single.title, 'दुकानदार को भुगतान');
+      expect(entries.single.subtitle, contains('₹1500'));
+      expect(entries.single.date, DateTime(2026, 11, 28, 15));
+    });
+
+    test('uses parent date instead of inventing today when payment date is absent', () {
+      final entries = HistoryProjection.build(
+        hisabs: [
+          {
+            'id': 'bill-2',
+            'title': 'Old bill',
+            'category': 'Khet',
+            'amount': '1000',
+            'date': '2026-11-20T09:00:00',
+            'payments': [{'amount': 200, 'direction': 'Diya'}],
+          },
+        ],
+        khet: const [],
+        members: const [],
+        products: const [],
+      );
+
+      final payment = entries.singleWhere((entry) => entry.title == 'Payment · Old bill');
+      expect(payment.date, DateTime(2026, 11, 20, 9));
+    });
+  });
+}
