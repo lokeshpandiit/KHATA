@@ -563,51 +563,6 @@ class _PaniCategoryDetail extends StatelessWidget {
   }
 }
 
-class _PersonMonthDetailScreen extends StatelessWidget {
-  const _PersonMonthDetailScreen({required this.name, required this.rows});
-  final String name;
-  final List<Map<String, dynamic>> rows;
-
-  double _amount(dynamic value) => value is num ? value.toDouble() :
-      double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
-  @override
-  Widget build(BuildContext context) {
-    final sorted = [...rows]..sort((a,b) =>
-      (DateTime.tryParse(a['date'] as String? ?? '') ?? DateTime(0))
-        .compareTo(DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(0)));
-    final given = sorted.where((r) => r['direction'] == 'PAID').fold<double>(0, (s,r)=>s+_amount(r['amount']));
-    final taken = sorted.where((r) => r['direction'] != 'PAID').fold<double>(0, (s,r)=>s+_amount(r['amount']));
-    final net = taken-given;
-    final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
-    return Scaffold(
-      appBar: AppBar(title: Text(name, overflow: TextOverflow.ellipsis)),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('NET BALANCE', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          Text('${net >= 0 ? '+' : '−'}${money.format(net.abs())}', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: net >= 0 ? Colors.green : Colors.red)),
-          const SizedBox(height: 8),
-          Text('Paise liye: ${money.format(taken)}   ·   Paise diye: ${money.format(given)}'),
-        ]))),
-        const SizedBox(height: 10),
-        const Text('Transaction history', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 6),
-        ...sorted.map((row) {
-          final paid = row['direction'] == 'PAID';
-          final date = DateTime.tryParse(row['date'] as String? ?? '');
-          final amount = _amount(row['amount']);
-          return Card(child: ListTile(
-            leading: Icon(paid ? Icons.arrow_upward : Icons.arrow_downward, color: paid ? Colors.red : Colors.green),
-            title: Text(paid ? 'Paise diye' : 'Paise liye'),
-            subtitle: Text('${date == null ? 'Date unavailable' : DateFormat('dd MMM yyyy · hh:mm a').format(date)}${(row['note'] ?? '').toString().trim().isEmpty ? '' : '\n${row['note']}'}'),
-            trailing: Text('${paid ? '−' : '+'}${money.format(amount)}', style: TextStyle(fontWeight: FontWeight.w800, color: paid ? Colors.red : Colors.green)),
-          ));
-        }),
-      ]),
-    );
-  }
-}
-
 class _KhetExpensesScreen extends StatefulWidget {
   const _KhetExpensesScreen({required this.rows, required this.money, this.initialMonth});
   final List<Map<String, dynamic>> rows;
