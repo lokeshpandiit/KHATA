@@ -1766,8 +1766,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
                       final cropName = crop == null ? 'Fasal record nahi hai' :
                           (crop['cropName'] ?? crop['title'] ?? 'Fasal').toString();
                       return '${plotLabel(plot)}: $cropName';
-                    }).join('
-'),
+                    }).join('\n'),
                   ),
                 ),
               ),
