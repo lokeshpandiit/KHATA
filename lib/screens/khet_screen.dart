@@ -2046,7 +2046,7 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
           decoration: InputDecoration(labelText: _well == 'Both same' ? 'Dono ke minutes (ek baar)' : 'Minutes')),
       const SizedBox(height: 12),
       TextField(controller: _exchange, keyboardType: TextInputType.number,
-        decoration: const InputDecoration(labelText: 'Badle mein pani ke minutes (optional)')),
+        decoration: const InputDecoration(labelText: 'Badle mein pani ke minutes (optional; blank chhode to jitne diye utne pending)')),
       const SizedBox(height: 12),
       TextField(controller: _cash, keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: const InputDecoration(labelText: 'Cash/rent ka total (₹)')),
