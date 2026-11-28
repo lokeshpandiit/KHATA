@@ -109,5 +109,61 @@ void main() {
       final payment = entries.singleWhere((entry) => entry.title == 'Payment · Old bill');
       expect(payment.date, DateTime(2026, 11, 20, 9));
     });
+
+    test('includes water cash payments, water exchange and work settlement by activity date', () {
+      final entries = HistoryProjection.build(
+        hisabs: const [],
+        khet: [
+          {
+            'id': 'pani-1',
+            'type': 'PANI',
+            'contact': 'Abhi',
+            'wellType': 'Tubewell',
+            'date': '2026-11-27T10:00:00',
+            'waterCashPaymentHistory': [
+              {
+                'amount': 500,
+                'direction': 'Diya',
+                'date': '2026-11-28T11:00:00',
+                'balanceBefore': 600,
+                'balanceAfter': 100,
+              },
+              {
+                'amount': 0,
+                'direction': 'WorkSettlement',
+                'date': '2026-11-29T12:00:00',
+                'balanceBefore': 100,
+                'balanceAfter': 0,
+                'note': 'Khet mein hal chalwaya',
+              },
+            ],
+            'waterExchangeHistory': [
+              {
+                'minutes': 30,
+                'date': '2026-11-28T13:00:00',
+                'balanceBefore': 60,
+                'balanceAfter': 30,
+                'note': 'Pani ka badla',
+              },
+            ],
+          },
+        ],
+        members: const [],
+        products: const [],
+      );
+
+      final waterPayment = entries.singleWhere((entry) => entry.title.startsWith('Water payment'));
+      final workSettlement = entries.singleWhere((entry) => entry.title.startsWith('Work settlement'));
+      final waterExchange = entries.singleWhere((entry) => entry.title.startsWith('Water settlement'));
+
+      expect(waterPayment.type, 'PANI');
+      expect(waterPayment.title, contains('Abhi · Tubewell'));
+      expect(waterPayment.subtitle, contains('₹500'));
+      expect(waterPayment.date, DateTime(2026, 11, 28, 11));
+      expect(workSettlement.subtitle, contains('Khet mein hal chalwaya'));
+      expect(workSettlement.date, DateTime(2026, 11, 29, 12));
+      expect(waterExchange.subtitle, contains('30 min'));
+      expect(waterExchange.date, DateTime(2026, 11, 28, 13));
+    });
   });
 }
