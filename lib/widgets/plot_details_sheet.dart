@@ -21,7 +21,7 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
   String? _selectedCropCycleId;
 
   DateTime? _date(Map<String, dynamic> row) {
-    for (final key in ['eventDate', 'harvestDate', 'date', 'sowingDate', 'applicationDate']) {
+    for (final key in ['eventDate', 'date', 'sowingDate', 'applicationDate']) {
       final value = row[key];
       if (value is String) {
         final parsed = DateTime.tryParse(value);
