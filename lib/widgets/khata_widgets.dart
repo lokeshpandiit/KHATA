@@ -8,6 +8,12 @@ String monthLabel(String key) => DateFormat('MMMM yyyy').format(DateTime.parse('
 String dateLabel(DateTime date) => DateFormat('EEE, d MMM yyyy').format(date);
 String timeLabel(DateTime date) => DateFormat('h:mm a').format(date);
 
+String cleanDisplayText(dynamic value) => value == null ? '' : value.toString()
+    .replaceAll(r'\\n', '\n')
+    .replaceAll(r'\\r', '\n')
+    .replaceAll(r'\n', '\n')
+    .replaceAll(r'\r', '\n');
+
 List<String> availableMonths(Iterable<Map<String, dynamic>> rows) {
   final months = rows
       .map((row) => row['date'] as String?)
