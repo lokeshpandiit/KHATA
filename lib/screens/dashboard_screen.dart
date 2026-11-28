@@ -30,6 +30,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   double _balance(Map<String, dynamic> row) {
+    final dashboardBalance = row['dashboardBalance'];
+    if (dashboardBalance is num) return dashboardBalance.toDouble();
     final explicit = row['balance'];
     if (explicit is num) return explicit.toDouble();
     final total = _amount(row['totalAmount'] ?? row['price']);
@@ -71,10 +73,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final monthPani = khet.where(thisMonth)
         .where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON')
         .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
-    final pending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0 && thisMonth(row)).toList()
-      ..sort((a, b) => (DateTime.tryParse(a['dueDate'] as String? ?? '') ?? DateTime(9999))
-          .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '') ?? DateTime(9999)));
-    final pendingTotal = pending.fold<double>(0, (sum, row) => sum + _balance(row));
+    final tractorPending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0 && thisMonth(row)).toList();
+    final vendorPurchases = khet.where((row) => row['type'] == 'KHET_PURCHASE' && thisMonth(row)).toList();
+    final vendorIds = vendorPurchases.map((r)=>r['vendorId']).where((id)=>id!=null).toSet();
+    final vendorPending = <Map<String,dynamic>>[];
+    for(final vendorId in vendorIds){
+      final purchases=khet.where((r)=>r['type']=='KHET_PURCHASE'&&r['vendorId']==vendorId).toList()
+        ..sort((a,b)=>(a['invoiceDate']??a['date']??'').toString().compareTo((b['invoiceDate']??b['date']??'').toString()));
+      var payments=khet.where((r)=>r['type']=='KHET_PURCHASE_PAYMENT'&&r['vendorId']==vendorId)
+        .fold<double>(0,(sum,r)=>sum+_amount(r['amount']));
+      for(final purchase in purchases){
+        final base=(_amount(purchase['totalAmount'])-_amount(purchase['paidAmount'])).clamp(0,double.infinity).toDouble();
+        final applied=payments<base?payments:base;
+        payments-=applied;
+        final balance=base-applied;
+        if(balance>0&&thisMonth(purchase))vendorPending.add({...purchase,'dashboardBalance':balance,'pendingKind':'PURCHASE'});
+      }
+    }
+    final pending=[...tractorPending,...vendorPending]
+      ..sort((a,b)=>(DateTime.tryParse(a['dueDate'] as String? ?? '')??DateTime(9999))
+          .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '')??DateTime(9999)));
+    final pendingTotal=pending.fold<double>(0,(sum,row)=>sum+_balance(row));
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
 
     return ListView(
@@ -686,7 +705,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
         children: [
           Card(
             child: ListTile(
-              title: const Text('Pending Tractor Payments'),
+              title: const Text('Pending Payments (Tractor + Khet Purchase)'),
               subtitle: Text('${widget.rows.length} records'),
               trailing: Text(
                 widget.money.format(pendingTotal),
@@ -704,12 +723,16 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
             return Card(
               child: ListTile(
                 title: Text(
-                  (row['customerName'] ?? row['contact'] ?? 'Customer')
-                      .toString(),
+                  row['pendingKind'] == 'PURCHASE'
+                      ? '${row['vendorName'] ?? 'Shop'} · ${row['title'] ?? 'Purchase'}'
+                      : (row['customerName'] ?? row['contact'] ?? 'Customer').toString(),
                 ),
                 subtitle: Text(
-                  '${row['work'] ?? row['title'] ?? 'Tractor work'}'
-                  '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}',
+                  row['pendingKind'] == 'PURCHASE'
+                      ? 'Purchase bill ₹${_amount(row['totalAmount']).toStringAsFixed(0)} · Paid ₹${_amount(row['paidAmount']).toStringAsFixed(0)}'
+                        '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}'
+                      : '${row['work'] ?? row['title'] ?? 'Tractor work'}'
+                        '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}',
                 ),
                 trailing: Text(
                   widget.money.format(_balance(row)),
