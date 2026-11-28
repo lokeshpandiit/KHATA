@@ -1308,8 +1308,6 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
         .where((row) =>
             row['type'] == 'FASAL' &&
             row['plotId'] == plotId &&
-            row['season'] == _season &&
-            row['year'] == _year &&
             row['harvested'] != true)
         .where((row) {
           final date = sowingDate(row);
@@ -1532,13 +1530,17 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
           });
         }
         if (widget.type == 'KHAD') {
+          if (currentCrop != null) record['cropCycleId'] = currentCrop['cropCycleId'];
           record['purpose'] = _fertilizerKind;
           record['fertilizerType'] = _fertilizerKind;
           record['cropAtUse'] = currentCrop == null ? 'Fasal record nahi hai' : (currentCrop['cropName'] ?? currentCrop['title'] ?? 'Fasal').toString();
           record['applicationDate'] = activityDate.toIso8601String();
         }
         if (widget.type == 'FASAL') {
+          final cycleId = 'cycle_${plotId ?? 'unknown'}_${batchId}_$index';
           record['cropName'] = title;
+          record['cropCycleId'] = cycleId;
+          record['cropCycleStatus'] = _harvested ? 'COMPLETED' : 'ACTIVE';
           record['sowingDate'] = activityDate.toIso8601String();
           record['harvested'] = _harvested;
           record['harvestDate'] = _harvested ? (_harvestDate ?? DateTime.now()).toIso8601String() : null;
@@ -1550,6 +1552,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
           record['sowingDate'] = activityDate.toIso8601String();
         }
         if (widget.type == 'DAWAI') {
+          if (currentCrop != null) record['cropCycleId'] = currentCrop['cropCycleId'];
           record['purpose'] = _purpose;
           record['applicationArea'] = _khalaOnly ? (_areaController.text.trim().isEmpty ? 'Khala / kacha nala' : _areaController.text.trim()) : 'Khet';
           record['cropAtUse'] = currentCrop == null
