@@ -426,7 +426,6 @@ class _PersonMonthDetailScreen extends StatelessWidget {
         const SizedBox(height: 6),
         ...sorted.reversed.map((row) {
           final delta = _delta(row);
-          final date = DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString());
           final isCost = row['entryType'] == 'EXPENSE' || row['type'] == 'KHET_PURCHASE' || row['type'] == 'TRACTOR';
           return Card(child: ListTile(
             leading: Icon(
