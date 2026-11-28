@@ -878,7 +878,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
       title: Text('Pani pending · ${row['borrowedContact'] ?? row['contact'] ?? 'Person'}'),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Text('${row['type'] == 'KUA' ? 'Humein is vyakti se pani lena hai' : 'Total udhaar'}: $owed min\nBadle mein mila: $exchanged min\nBaki: $remaining min\n${row['type'] == 'KUA' ? 'Kua: ${row['wellSelection'] ?? 'Solar'}' : ''}', style: const TextStyle(fontWeight: FontWeight.w600)),
-        DropdownButtonFormField<String>(value: status, items: const [
+        DropdownButtonFormField<String>(value: status, items: [
           DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
           if (row['type'] != 'KUA') DropdownMenuItem(value: 'PAID', child: Text('Payment mil gaya')),
           DropdownMenuItem(value: 'WATER_EXCHANGE', child: Text('Badle mein pani liya')),
