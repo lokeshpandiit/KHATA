@@ -273,7 +273,7 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
             : (selectedCycle['cropName'] ?? selectedCycle['title'] ?? 'Fasal').toString() +
                 (_isCompleted(selectedCycle) ? ' (Kat chuki)' : ' (Current)');
         final expenseRows = entries.where((row) =>
-            ['FASAL', 'KHAD', 'DAWAI', 'HARA_BEEJ', 'OTHER'].contains(row['type']) &&
+            ['FASAL', 'KHAD', 'DAWAI', 'HARA_BEEJ', 'OTHER', 'KHET_STOCK_USE'].contains(row['type']) &&
             _amount(row['price']) > 0).toList();
         final totalCropExpenses = expenseRows.fold<double>(
             0, (sum, row) => sum + _amount(row['price']));
@@ -390,6 +390,7 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                           'KHAD' => 'Khaad dali',
                           'DAWAI' => 'Dawai / spray',
                           'HARA_BEEJ' => 'Hara beej / chara',
+                          'KHET_STOCK_USE' => 'Purchased stock used',
                           'HARVEST_EVENT' => 'Fasal katayi poori',
                           'HARVEST_PLANNED' => 'Planned fasal katayi',
                           _ => type.isEmpty ? 'Activity' : type,
@@ -401,7 +402,7 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                               if ((row['borrowedMinutes'] as num?)?.toInt() case final borrowed? when borrowed > 0)
                                 'Liye: ${formatMinutes(borrowed)}',
                             ].join(' · '),
-                          'KHAD' || 'DAWAI' || 'HARA_BEEJ' || 'FASAL' =>
+                          'KHAD' || 'DAWAI' || 'HARA_BEEJ' || 'FASAL' || 'KHET_STOCK_USE' =>
                             [
                               (row['title'] ?? row['purpose'] ?? row['seedName'] ?? '').toString(),
                               if (_amount(row['price']) > 0) '₹${_amount(row['price']).toStringAsFixed(0)}',
@@ -417,6 +418,7 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
                             'KHAD' => Icons.science_outlined,
                             'DAWAI' => Icons.medication_outlined,
                             'FASAL' => Icons.grass_outlined,
+                            'KHET_STOCK_USE' => Icons.inventory_2_outlined,
                             'HARVEST_EVENT' => Icons.agriculture_outlined,
                             'HARVEST_PLANNED' => Icons.event_outlined,
                             _ => Icons.history,
