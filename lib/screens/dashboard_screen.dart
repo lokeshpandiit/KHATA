@@ -635,6 +635,11 @@ class _KhetExpensesScreenState extends State<_KhetExpensesScreen> {
     return 'Other';
   }
 
+  String _personKey(Map<String, dynamic> row) {
+    return (row['personName'] ?? row['vendorName'] ?? row['customerName'] ?? row['contact'] ?? '')
+        .toString().trim().toLowerCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     final expenses = widget.rows.where(_isExpense).toList();
@@ -667,8 +672,35 @@ class _KhetExpensesScreenState extends State<_KhetExpensesScreen> {
     }
     final categoryEntries = sortedCategories.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+
+    // Apply later person payments to the oldest unpaid expense first.
+    final paymentsByPerson = <String, double>{};
+    for (final row in widget.rows) {
+      final isVendorPayment = row['type'] == 'KHET_PURCHASE_PAYMENT';
+      final isPersonPayment = row['category'] == 'Khet' &&
+          row['direction'] == 'PAID' && row['entryType'] != 'EXPENSE';
+      if (!isVendorPayment && !isPersonPayment) continue;
+      final key = _personKey(row);
+      if (key.isEmpty) continue;
+      paymentsByPerson[key] = (paymentsByPerson[key] ?? 0) +
+          _amount(isVendorPayment ? row['amount'] : row['amount']);
+    }
+    final orderedExpenses = [...expenses]
+      ..sort((a, b) => (a['date'] ?? a['invoiceDate'] ?? '').toString()
+          .compareTo((b['date'] ?? b['invoiceDate'] ?? '').toString()));
+    final remainingById = <String, double>{};
+    for (final expense in orderedExpenses) {
+      final id = (expense['id'] ?? '').toString();
+      final key = _personKey(expense);
+      final basePending = (_total(expense) - _amount(expense['paidAmount']))
+          .clamp(0, double.infinity).toDouble();
+      final available = key.isEmpty ? 0.0 : (paymentsByPerson[key] ?? 0.0);
+      final applied = available < basePending ? available : basePending;
+      if (key.isNotEmpty) paymentsByPerson[key] = available - applied;
+      remainingById[id] = basePending - applied;
+    }
     final pending = monthly.fold<double>(0, (sum, row) =>
-        sum + (_total(row) - _amount(row['paidAmount'])).clamp(0, double.infinity));
+        sum + (remainingById[(row['id'] ?? '').toString()] ?? 0));
 
     return Scaffold(
       appBar: AppBar(title: const Text('All Khet Expenses')),
@@ -733,7 +765,7 @@ class _KhetExpensesScreenState extends State<_KhetExpensesScreen> {
             if (person.isNotEmpty) 'Person: $person',
             if (plot.isNotEmpty) plot,
             'Paid ${widget.money.format(paid)}',
-            'Pending ${widget.money.format((amount - paid).clamp(0, double.infinity))}',
+            'Pending ${widget.money.format(remainingById[(row['id'] ?? '').toString()] ?? (amount - paid).clamp(0, double.infinity).toDouble())}',
             if ((row['note'] ?? '').toString().trim().isNotEmpty) row['note'].toString().trim(),
           ];
           return Card(
