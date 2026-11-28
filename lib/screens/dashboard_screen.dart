@@ -1387,6 +1387,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
       0, (sum, e) => sum + _amount(e['minutes']).toInt(),
     );
     final left = (owed - totalExchanged).clamp(0, 999999);
+    final workSettlementMode = status == 'WORK_SETTLEMENT';
     final newCashDue = workSettlementMode ? 0.0 : (status == 'CASH_PAYMENT' ? _amount(cashDueController.text) : oldCashDue);
     final newCashPaid = workSettlementMode ? 0.0 : (status == 'CASH_PAYMENT'
         ? oldCashPaid + _amount(cashAmountController.text)
@@ -1406,7 +1407,6 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
       });
     }
 
-    final workSettlementMode = status == 'WORK_SETTLEMENT';
     if (workSettlementMode) {
       cashHistory.add({
         'amount': 0,
