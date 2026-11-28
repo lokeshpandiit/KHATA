@@ -490,7 +490,7 @@ class _PersonMonthDetailScreen extends StatelessWidget {
     double running = 0;
     for (final row in sorted) {
       running += _delta(row);
-      runningBalances[(row['id'] ?? '${row['date']}-${row['title']}').toString()] = running;
+      runningBalances[row['id']?.toString() ?? ''] = running;
     }
     final net = sorted.fold<double>(0, (sum, row) => sum + _delta(row));
     final currentMonthRows = sorted.where((row) {
@@ -543,7 +543,11 @@ class _PersonMonthDetailScreen extends StatelessWidget {
                       : Icons.call_received,
             ),
             title: Text(_title(row)),
-            subtitle: Text('${_subtitle(row, money)}\\nBalance after: ${((runningBalances[(row['id'] ?? '${row['date']}-${row['title']}').toString()] ?? 0) >= 0 ? '₹${money.format((runningBalances[(row['id'] ?? '${row['date']}-${row['title']}').toString()] ?? 0).abs())} lena baki' : '₹${money.format((runningBalances[(row['id'] ?? '${row['date']}-${row['title']}').toString()] ?? 0).abs())} dena baki'}'),
+            final balanceAfter = runningBalances[row['id']?.toString() ?? ''] ?? 0;
+            final balanceLabel = balanceAfter >= 0
+                ? '${money.format(balanceAfter.abs())} lena baki'
+                : '${money.format(balanceAfter.abs())} dena baki';
+            subtitle: Text('${_subtitle(row, money)}\\nBalance after: $balanceLabel'),
             trailing: Text(
               delta.abs() < 0.009 ? '₹0' : '${delta > 0 ? '+' : '−'}${money.format(delta.abs())}',
               style: TextStyle(fontWeight: FontWeight.w800, color: delta > 0 ? Colors.green : delta < 0 ? Colors.red : Colors.black54),
