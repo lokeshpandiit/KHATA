@@ -638,7 +638,7 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
           'voice': _voice,
           'callRecording': _callRecording,
           'payments': paid > 0
-              ? [{'amount': paid, 'direction': 'PAID', 'date': entryDate.toIso8601String()}]
+              ? [{'amount': paid, 'direction': 'PAID', 'date': entryDate.toIso8601String(), 'balanceBefore': total, 'balanceAfter': (total - paid).clamp(0, double.infinity)}]
               : <Map<String, dynamic>>[],
           'date': entryDate.toIso8601String(),
         });
