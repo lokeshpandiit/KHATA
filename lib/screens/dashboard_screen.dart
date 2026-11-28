@@ -78,7 +78,7 @@ class DashboardScreen extends StatelessWidget {
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _PendingPaymentsScreen(rows: pending, money: money, storage: storage),
+              builder: (_) => _PendingPaymentsScreen(rows: pending, waterRows: khet.where((r) => r['type'] == 'PANI' && r['waterPaymentPending'] == true).toList(), money: money, storage: storage),
             )),
             child: _MetricCard(title: 'Pending payments', value: money.format(pendingTotal), icon: Icons.pending_actions, tint: const Color(0xFFE5F2EC)),
           )),
@@ -364,11 +364,13 @@ class _KhetExpensesScreenState extends State<_KhetExpensesScreen>{
 class _PendingPaymentsScreen extends StatefulWidget {
   const _PendingPaymentsScreen({
     required this.rows,
+    required this.waterRows,
     required this.money,
     required this.storage,
   });
 
   final List<Map<String, dynamic>> rows;
+  final List<Map<String, dynamic>> waterRows;
   final NumberFormat money;
   final StorageBackupService storage;
 
@@ -392,6 +394,31 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
             _amount(row['paidAmount']))
         .clamp(0, double.infinity)
         .toDouble();
+  }
+
+  Future<void> _updateWaterStatus(Map<String,dynamic> row) async {
+    final noteController = TextEditingController(text: (row['waterPaymentNote'] ?? '').toString());
+    String status = (row['waterPaymentStatus'] ?? 'PENDING').toString();
+    final saved = await showDialog<bool>(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
+      title: Text('Pani pending · ${row['borrowedContact'] ?? row['contact'] ?? 'Person'}'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        DropdownButtonFormField<String>(value: status, items: const [
+          DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
+          DropdownMenuItem(value: 'PAID', child: Text('Payment mil gaya')),
+          DropdownMenuItem(value: 'WATER_EXCHANGE', child: Text('Badle mein pani liya')),
+        ], onChanged: (v) => setDialog(() { status = v ?? 'PENDING'; })),
+        TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note')),
+      ]),
+      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save'))],
+    )));
+    if (saved != true) { noteController.dispose(); return; }
+    final updated = Map<String,dynamic>.from(row)
+      ..['waterPaymentStatus'] = status
+      ..['waterPaymentPending'] = status == 'PENDING'
+      ..['waterPaymentNote'] = noteController.text.trim();
+    await widget.storage.updateRecord('khet', row['id'].toString(), updated);
+    noteController.dispose();
+    if (mounted) setState(() {});
   }
 
   Future<void> _addPlan() async {
@@ -626,10 +653,20 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
             );
           }),
           const SizedBox(height: 16),
-          const Text(
-            'Future Plans & Reminders',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
+          const Text('Pending Pani', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          ...widget.waterRows.where((row) => row['waterPaymentPending'] == true).map((row) {
+            final date = DateTime.tryParse(row['date']?.toString() ?? '');
+            final mins = (row['borrowedMinutes'] as num?)?.toInt() ?? 0;
+            final source = (row['borrowedSource'] ?? row['source'] ?? 'Pani').toString();
+            return Card(child: ListTile(
+              title: Text('${row['borrowedContact'] ?? row['contact'] ?? 'Person'} · $source'),
+              subtitle: Text('$mins min · ${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}\n${row['note'] ?? ''}'),
+              trailing: const Icon(Icons.edit_note),
+              onTap: () => _updateWaterStatus(row),
+            ));
+          }),
+          const SizedBox(height: 16),
+          const Text('Pending Work / Reminders', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           if (plans.isEmpty)
             const Padding(
               padding: EdgeInsets.all(12),
