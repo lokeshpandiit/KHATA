@@ -75,6 +75,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
     final tractorPending = khet.where((row) => row['type'] == 'TRACTOR' && _balance(row) > 0 && thisMonth(row)).toList();
     final vendorPurchases = khet.where((row) => row['type'] == 'KHET_PURCHASE' && thisMonth(row)).toList();
+    final monthVendorTotal = vendorPurchases.fold<double>(0,(sum,row)=>sum+_amount(row['totalAmount']));
+    final monthVendorPaid = vendorPurchases.fold<double>(0,(sum,row)=>sum+_amount(row['paidAmount']));
     final vendorIds = vendorPurchases.map((r)=>r['vendorId']).where((id)=>id!=null).toSet();
     final vendorPending = <Map<String,dynamic>>[];
     for(final vendorId in vendorIds){
@@ -153,6 +155,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           )),
         ]),
         const SizedBox(height: 8),
+        Card(child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.storefront_outlined)),
+          title: Text('${DateFormat('MMMM yyyy').format(selectedDate)} · Dawai/Khaad purchases'),
+          subtitle: Text('Bought ${money.format(monthVendorTotal)} · Paid at purchase ${money.format(monthVendorPaid)} · Pending ${money.format(monthVendorTotal-monthVendorPaid)}'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => _MonthVendorPurchasesScreen(rows: vendorPurchases, allRows: khet, monthTitle: DateFormat('MMMM yyyy').format(selectedDate), money: money))),
+        )),
       ],
     );
   }
@@ -718,8 +727,8 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
             ),
           ),
           ...widget.rows.map((row) {
-            final due =
-                DateTime.tryParse(row['dueDate']?.toString() ?? '');
+            final due = DateTime.tryParse(row['dueDate']?.toString() ?? '');
+            final isPurchase = row['pendingKind'] == 'PURCHASE';
             return Card(
               child: ListTile(
                 title: Text(
@@ -734,13 +743,8 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
                       : '${row['work'] ?? row['title'] ?? 'Tractor work'}'
                         '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}',
                 ),
-                trailing: Text(
-                  widget.money.format(_balance(row)),
-                  style: const TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                trailing: Text(widget.money.format(_balance(row)), style: const TextStyle(color: Colors.red,fontWeight: FontWeight.bold)),
+                onTap: isPurchase ? () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => KhetVendorLedgerDashboardScreen(vendorId: row['vendorId'].toString(), vendorName: (row['vendorName']??'Shop').toString(), rows: widget.storage.records('khet'))) : null,
               ),
             );
           }),
@@ -788,4 +792,23 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
       ),
     );
   }
+}
+class KhetVendorLedgerDashboardScreen extends StatefulWidget {
+ const KhetVendorLedgerDashboardScreen({required this.vendorId,required this.vendorName,required this.rows,super.key});
+ final String vendorId,vendorName; final List<Map<String,dynamic>> rows;
+ @override State<KhetVendorLedgerDashboardScreen> createState()=>_KhetVendorLedgerDashboardScreenState();
+}
+class _KhetVendorLedgerDashboardScreenState extends State<KhetVendorLedgerDashboardScreen>{
+ double n(dynamic v)=>v is num?v.toDouble():double.tryParse((v??'').toString())??0;
+ List<Map<String,dynamic>> get purchases=>widget.rows.where((r)=>r['type']=='KHET_PURCHASE'&&r['vendorId']==widget.vendorId).toList();
+ List<Map<String,dynamic>> get payments=>widget.rows.where((r)=>r['type']=='KHET_PURCHASE_PAYMENT'&&r['vendorId']==widget.vendorId).toList();
+ double get balance=>purchases.fold<double>(0,(s,r)=>s+n(r['totalAmount'])-n(r['paidAmount']))-payments.fold<double>(0,(s,r)=>s+n(r['amount']));
+ Future<void> pay()async{final c=TextEditingController();final result=await showDialog<double>(context:context,builder:(ctx)=>AlertDialog(title:Text('Payment · ${widget.vendorName}'),content:Column(mainAxisSize:MainAxisSize.min,children:[Text('Remaining: ₹${balance.toStringAsFixed(0)}'),TextField(controller:c,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'Payment amount (full/partial)'))]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),FilledButton(onPressed:(){final v=double.tryParse(c.text);if(v!=null&&v>0)Navigator.pop(ctx,v);},child:const Text('Save'))]));c.dispose();if(result==null)return;await StorageBackupService.instance.addRecord('khet',{'id':DateTime.now().microsecondsSinceEpoch.toString(),'type':'KHET_PURCHASE_PAYMENT','vendorId':widget.vendorId,'vendorName':widget.vendorName,'amount':result,'date':DateTime.now().toIso8601String(),'allocationMethod':'OLDEST_BILL_FIRST'});if(mounted)setState((){});}
+ @override Widget build(BuildContext context){final p=purchases..sort((a,b)=>(a['date']??'').toString().compareTo((b['date']??'').toString()));final paidAt=p.fold<double>(0,(s,r)=>s+n(r['paidAmount'])),paidLater=payments.fold<double>(0,(s,r)=>s+n(r['amount']));final fmt=NumberFormat.currency(locale:'en_IN',symbol:'₹',decimalDigits:0);return Scaffold(appBar:AppBar(title:Text('${widget.vendorName} · Khata')),body:ListView(padding:const EdgeInsets.all(16),children:[Card(child:ListTile(title:const Text('Total purchase'),trailing:Text(fmt.format(p.fold<double>(0,(s,r)=>s+n(r['totalAmount'])))))),Card(child:ListTile(title:const Text('Paid at purchase'),trailing:Text(fmt.format(paidAt)))),Card(child:ListTile(title:const Text('Payments later'),trailing:Text(fmt.format(paidLater)))),Card(child:ListTile(title:Text(balance>=0?'Net pending':'Advance'),trailing:Text(fmt.format(balance.abs()),style:TextStyle(fontWeight:FontWeight.bold,color:balance>0?Colors.red:Colors.green)))),const SizedBox(height:10),const Text('Bills',style:TextStyle(fontWeight:FontWeight.bold,fontSize:18)),...p.map((r){final b=n(r['totalAmount'])-n(r['paidAmount']);return Card(child:ListTile(title:Text((r['title']??'Purchase').toString()),subtitle:Text('Bill ${fmt.format(n(r['totalAmount']))} · Paid ${fmt.format(n(r['paidAmount']))} · ${DateFormat('dd MMM yyyy').format(DateTime.tryParse(r['invoiceDate']??r['date']??'')??DateTime.now())}'),trailing:Text(fmt.format(b.clamp(0,double.infinity)),style:TextStyle(color:b>0?Colors.red:Colors.green,fontWeight:FontWeight.bold))));})]),floatingActionButton:FloatingActionButton.extended(onPressed:pay,icon:const Icon(Icons.payments),label:const Text('Full / Partial Payment')));}
+}
+class _MonthVendorPurchasesScreen extends StatelessWidget{
+ const _MonthVendorPurchasesScreen({required this.rows,required this.allRows,required this.monthTitle,required this.money});
+ final List<Map<String,dynamic>> rows,allRows;final String monthTitle;final NumberFormat money;
+ double n(dynamic v)=>v is num?v.toDouble():double.tryParse((v??'').toString())??0;
+ @override Widget build(BuildContext context){final byPerson=<String,List<Map<String,dynamic>>>{};for(final r in rows){byPerson.putIfAbsent((r['vendorName']??'Shop').toString(),()=>[]).add(r);}final names=byPerson.keys.toList()..sort();return Scaffold(appBar:AppBar(title:Text('$monthTitle · Purchase Hisab'.replaceFirst('$',''))),body:ListView(padding:const EdgeInsets.all(16),children:[Card(child:ListTile(title:const Text('Month total purchases'),trailing:Text(money.format(rows.fold<double>(0,(s,r)=>s+n(r['totalAmount'])))))),...names.map((name){final list=byPerson[name]!;final total=list.fold<double>(0,(s,r)=>s+n(r['totalAmount']));final paid=list.fold<double>(0,(s,r)=>s+n(r['paidAmount']));final id=list.first['vendorId']?.toString()??'';return Card(child:ListTile(title:Text(name,style:const TextStyle(fontWeight:FontWeight.bold)),subtitle:Text('${list.length} bills · Bought ${money.format(total)} · Paid ${money.format(paid)} · Pending ${money.format(total-paid)}'),trailing:const Icon(Icons.chevron_right),onTap:()=>Navigator.push(context,MaterialPageRoute<void>(builder:(_)=>KhetVendorLedgerDashboardScreen(vendorId:id,vendorName:name,rows:allRows))));}),...rows.map((r)=>Card(child:ListTile(title:Text('${r['title']??'Purchase'} · ${r['vendorName']??''}'),subtitle:Text('${r['purchaseCategory']??''} · ${DateFormat('dd MMM yyyy').format(DateTime.tryParse(r['invoiceDate']??r['date']??'')??DateTime.now())}'),trailing:Text(money.format(n(r['totalAmount']))))))]));}
 }
