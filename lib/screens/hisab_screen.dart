@@ -268,6 +268,8 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
   String _expenseCategory = 'Tractor';
   String _tractorWork = 'Bijai';
   String? _plotId;
+  String _plotScope = 'KHET';
+  final List<String> _plotIds = [];
   DateTime _entryDate = DateTime.now();
 
   bool get _isKhetExpense => _category == 'Khet' && _entryType == 'EXPENSE';
@@ -363,6 +365,149 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  List<Map<String, dynamic>> get _ownedPlots => _storage.records('plots')
+      .where((plot) => plot['isMine'] == true)
+      .toList();
+
+  List<String> _selectedPlotLabels() {
+    final labels = <String>[];
+    for (final plot in _ownedPlots.where((plot) => _plotIds.contains(plot['id'].toString()))) {
+      final crop = currentCropForPlot(_storage, plot['id']);
+      labels.add(crop.isEmpty ? plotLabel(plot) : '${plotLabel(plot)} ($crop)');
+    }
+    return labels;
+  }
+
+  Future<void> _pickMultiplePlots() async {
+    final plots = _ownedPlots;
+    if (plots.isEmpty) {
+      _error('Pehle Khet Map mein apne kille add karein.');
+      return;
+    }
+    final picked = await showModalBottomSheet<List<String>>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        final temporary = List<String>.from(_plotIds);
+        return StatefulBuilder(
+          builder: (context, setSheetState) => SafeArea(
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height * 0.72,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Kille select karein',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(sheetContext),
+                          icon: const Icon(Icons.close),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView(
+                      children: plots.map((plot) {
+                        final id = plot['id'].toString();
+                        final crop = currentCropForPlot(_storage, id);
+                        final label = crop.isEmpty
+                            ? '${plotLabel(plot)} (Fasal nahi)'
+                            : '${plotLabel(plot)} ($crop)';
+                        return CheckboxListTile(
+                          value: temporary.contains(id),
+                          title: Text(label),
+                          controlAffinity: ListTileControlAffinity.leading,
+                          onChanged: (checked) => setSheetState(() {
+                            if (checked == true) {
+                              if (!temporary.contains(id)) temporary.add(id);
+                            } else {
+                              temporary.remove(id);
+                            }
+                          }),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(sheetContext, temporary),
+                        child: Text('Done · ${temporary.length} kille selected'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (picked != null && mounted) {
+      setState(() => _plotIds
+        ..clear()
+        ..addAll(picked));
+    }
+  }
+
+  Widget _plotScopeFields() {
+    if (_expenseCategory == 'Rassi / Samaan') {
+      return const InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Killa / Field',
+          prefixIcon: Icon(Icons.grid_view_outlined),
+        ),
+        child: Text('पूरा खेत · किसी एक किले से लिंक नहीं'),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DropdownButtonFormField<String>(
+          initialValue: _plotScope,
+          decoration: const InputDecoration(
+            labelText: 'Killa / Field',
+            prefixIcon: Icon(Icons.grid_view_outlined),
+          ),
+          items: const [
+            DropdownMenuItem(value: 'KHET', child: Text('पूरा खेत')),
+            DropdownMenuItem(value: 'SINGLE', child: Text('एक किला')),
+            DropdownMenuItem(value: 'MULTIPLE', child: Text('कई किले (Multiple Selection)')),
+          ],
+          onChanged: (value) => setState(() {
+            _plotScope = value ?? 'KHET';
+            if (_plotScope != 'SINGLE') _plotId = null;
+            if (_plotScope != 'MULTIPLE') _plotIds.clear();
+          }),
+        ),
+        if (_plotScope == 'SINGLE') ...[
+          const SizedBox(height: 10),
+          KhetPlotDropdown(
+            selectedId: _plotId,
+            onChanged: (value) => setState(() => _plotId = value),
+          ),
+        ],
+        if (_plotScope == 'MULTIPLE') ...[
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _pickMultiplePlots,
+            icon: const Icon(Icons.checklist),
+            label: Text(_plotIds.isEmpty
+                ? 'Kille select karein'
+                : '${_plotIds.length} kille selected · ${_selectedPlotLabels().join(', ')}'),
+          ),
+        ],
+      ],
+    );
+  }
+
   Future<void> _pickDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -412,6 +557,14 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
         _error('Udhar baaki hai to kisko dena hai, us vyakti ka naam zaroor bharein');
         return;
       }
+      if (_expenseCategory != 'Rassi / Samaan' && _plotScope == 'SINGLE' && _plotId == null) {
+        _error('Ek killa select karein, ya poora khet choose karein');
+        return;
+      }
+      if (_expenseCategory != 'Rassi / Samaan' && _plotScope == 'MULTIPLE' && _plotIds.isEmpty) {
+        _error('Kam se kam ek killa select karein');
+        return;
+      }
     }
 
     setState(() => _saving = true);
@@ -443,7 +596,21 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
           'status': paid >= total ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'PENDING'),
           'personName': person,
           'personPhone': _personPhone.text.trim(),
-          'plotId': _plotId,
+          'plotScope': _expenseCategory == 'Rassi / Samaan' ? 'KHET' : _plotScope,
+          'plotId': _expenseCategory != 'Rassi / Samaan' && _plotScope == 'SINGLE' ? _plotId : null,
+          'plotIds': _expenseCategory != 'Rassi / Samaan' && _plotScope == 'MULTIPLE'
+              ? List<String>.from(_plotIds)
+              : <String>[],
+          'plotLabelsSnapshot': _expenseCategory != 'Rassi / Samaan' && _plotScope == 'MULTIPLE'
+              ? _selectedPlotLabels()
+              : _expenseCategory != 'Rassi / Samaan' && _plotScope == 'SINGLE' && _plotId != null
+                  ? [
+                      for (final plot in _ownedPlots.where((plot) => plot['id'] == _plotId))
+                        currentCropForPlot(_storage, _plotId).isEmpty
+                            ? plotLabel(plot)
+                            : '${plotLabel(plot)} (${currentCropForPlot(_storage, _plotId)})'
+                    ]
+                  : <String>[],
           'note': _note.text.trim(),
           'photo': _photos.isEmpty ? null : _photos.first,
           'photos': _photos,
@@ -543,7 +710,14 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
                 DropdownMenuItem(value: 'Mazdoori', child: Text('Mazdoori')),
                 DropdownMenuItem(value: 'Other', child: Text('Other')),
               ],
-              onChanged: (value) => setState(() => _expenseCategory = value ?? _expenseCategory),
+              onChanged: (value) => setState(() {
+                _expenseCategory = value ?? _expenseCategory;
+                if (_expenseCategory == 'Rassi / Samaan') {
+                  _plotScope = 'KHET';
+                  _plotId = null;
+                  _plotIds.clear();
+                }
+              }),
             ),
             if (_expenseCategory == 'Tractor') ...[
               const SizedBox(height: 10),
@@ -570,7 +744,7 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+            _plotScopeFields(),
             const SizedBox(height: 10),
           ] else ...[
             TextField(
