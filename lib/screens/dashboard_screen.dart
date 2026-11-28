@@ -1261,8 +1261,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
               const DropdownMenuItem(value: 'PENDING', child: Text('Pending')),
               if (!cashMode)
                 const DropdownMenuItem(value: 'WATER_EXCHANGE', child: Text('Badle mein pani liya')),
-              if (row['type'] != 'KUA')
-                const DropdownMenuItem(value: 'CASH_PAYMENT', child: Text('Rupaye dekar settle karein')),
+              const DropdownMenuItem(value: 'CASH_PAYMENT', child: Text('Paise dekar settle karein')),
             ],
             onChanged: (v) => setDialog(() { status = v ?? 'PENDING'; }),
           ),
