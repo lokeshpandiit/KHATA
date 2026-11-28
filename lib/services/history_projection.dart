@@ -73,7 +73,6 @@ class HistoryProjection {
             if (note.isNotEmpty) note,
           ].where((part) => part.isNotEmpty).join(' · '),
           date: _parseDate(payment['date']) ?? _recordDate(record),
-            sortDate: _parseDate(payment['enteredAt']) ?? _parseDate(payment['createdAt']) ?? _parseDate(payment['date']) ?? _parseDate(record['createdAt']) ?? _recordDate(record),
           sortDate: _parseDate(payment['enteredAt']) ?? _parseDate(payment['createdAt']) ?? _parseDate(payment['date']) ?? _parseDate(record['createdAt']) ?? _recordDate(record),
         ));
       }
@@ -115,6 +114,7 @@ class HistoryProjection {
           _value(record['note']),
         ].where((part) => part.isNotEmpty).join(' · '),
         date: _recordDate(record),
+        sortDate: _parseDate(record['createdAt']) ?? _recordDate(record),
       ));
       addPayments(record, 'HISAB', title);
     }
@@ -140,6 +140,7 @@ class HistoryProjection {
               if (note.isNotEmpty) note,
             ].where((part) => part.isNotEmpty).join(' · '),
             date: _parseDate(payment['date']) ?? _recordDate(record),
+            sortDate: _parseDate(payment['enteredAt']) ?? _parseDate(payment['createdAt']) ?? _parseDate(payment['date']) ?? _parseDate(record['createdAt']) ?? _recordDate(record),
           ));
         }
       }
@@ -216,6 +217,7 @@ class HistoryProjection {
                 _value(record['note']),
               ].where((part) => part.isNotEmpty).join(' · '),
         date: _recordDate(record),
+        sortDate: _parseDate(record['createdAt']) ?? _recordDate(record),
       ));
       addPayments(record, type, title);
       if (isWater) addWaterSettlementRows(record, title);
@@ -228,6 +230,7 @@ class HistoryProjection {
         title: 'Member · ${_value(record['name'])}',
         subtitle: documents == 0 ? 'Member record' : '$documents document(s)',
         date: _recordDate(record),
+        sortDate: _parseDate(record['createdAt']) ?? _recordDate(record),
       ));
     }
 
@@ -237,6 +240,7 @@ class HistoryProjection {
         title: 'Product · ${_value(record['name'])}',
         subtitle: _value(record['note']),
         date: _recordDate(record),
+        sortDate: _parseDate(record['createdAt']) ?? _recordDate(record),
       ));
     }
 
