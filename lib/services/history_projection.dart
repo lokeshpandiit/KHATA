@@ -114,6 +114,51 @@ class HistoryProjection {
       addPayments(record, 'HISAB', title);
     }
 
+    void addWaterSettlementRows(Map<String, dynamic> record, String title) {
+      final cashHistory = record['waterCashPaymentHistory'];
+      if (cashHistory is List) {
+        for (final payment in cashHistory.whereType<Map>()) {
+          final direction = _value(payment['direction']);
+          final workSettlement = direction == 'WorkSettlement';
+          final amount = payment['amount'];
+          final note = _value(payment['note']);
+          final balance = payment['balanceAfter'];
+          entries.add(HistoryEntry(
+            type: 'PANI',
+            title: workSettlement ? 'Work settlement · $title' : 'Water payment · $title',
+            subtitle: [
+              if (workSettlement) 'Khet mein kaam karke settle'
+              else if (direction.isNotEmpty) direction,
+              if (!workSettlement && amount != null && amount is num && amount.abs() > 0.009)
+                _money(amount),
+              if (balance != null) 'Remaining ${_money(balance)}',
+              if (note.isNotEmpty) note,
+            ].where((part) => part.isNotEmpty).join(' · '),
+            date: _parseDate(payment['date']) ?? _recordDate(record),
+          ));
+        }
+      }
+
+      final exchangeHistory = record['waterExchangeHistory'];
+      if (exchangeHistory is List) {
+        for (final exchange in exchangeHistory.whereType<Map>()) {
+          final minutes = exchange['minutes'];
+          final note = _value(exchange['note']);
+          final balance = exchange['balanceAfter'];
+          entries.add(HistoryEntry(
+            type: 'PANI',
+            title: 'Water settlement · $title',
+            subtitle: [
+              if (minutes != null) _minutes(minutes),
+              if (balance != null) 'Remaining $balance min',
+              if (note.isNotEmpty) note,
+            ].where((part) => part.isNotEmpty).join(' · '),
+            date: _parseDate(exchange['date']) ?? _recordDate(record),
+          ));
+        }
+      }
+    }
+
     for (final record in khet) {
       final kind = _value(record['type']);
       final isWater = kind == 'PANI' ||
@@ -167,6 +212,7 @@ class HistoryProjection {
         date: _recordDate(record),
       ));
       addPayments(record, type, title);
+      if (isWater) addWaterSettlementRows(record, title);
     }
 
     for (final record in members) {
