@@ -1506,7 +1506,30 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
           TextField(controller: amountController, keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(labelText: direction == 'Diya' ? 'Kitne paise diye?' : 'Kitne paise wapas mile?'),
             onChanged: (_) => setDialog(() {})),
-          Text('Iske baad baki: ${widget.money.format(direction == 'Diya' ? (before - _amount(amountController.text)).clamp(0, double.infinity) : before + _amount(amountController.text))}'),
+          Builder(builder: (context) {
+            final entered = _amount(amountController.text);
+            final remaining = direction == 'Diya'
+                ? (before - entered).clamp(0, double.infinity).toDouble()
+                : before + entered;
+            final exceeds = direction == 'Diya' && entered > before + 0.009;
+            return Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(top: 8, bottom: 4),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.secondaryContainer.withOpacity(0.45),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('Hisab: ${widget.money.format(before)} ${direction == 'Diya' ? '−' : '+'} ${widget.money.format(entered)}'),
+                const SizedBox(height: 4),
+                Text(
+                  exceeds ? 'Baki se zyada amount hai!' : 'Ab baki: ${widget.money.format(remaining)}',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: exceeds ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.primary),
+                ),
+              ]),
+            );
+          }),
           TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note (optional)')),
           OutlinedButton.icon(icon: const Icon(Icons.calendar_today),
             label: Text('Date: ${DateFormat('dd MMM yyyy').format(paymentDate)}'),
