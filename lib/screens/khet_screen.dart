@@ -1883,7 +1883,6 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
   final _oneMinutes = TextEditingController();
   final _solar = TextEditingController();
   final _diesel = TextEditingController();
-  final _exchange = TextEditingController(text: '0');
   final _cash = TextEditingController(text: '0');
   final _paid = TextEditingController(text: '0');
   final _note = TextEditingController();
@@ -1897,7 +1896,7 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
 
   @override
   void dispose() {
-    for (final c in [_oneMinutes, _solar, _diesel, _exchange, _cash, _paid, _note, _manualPerson]) { c.dispose(); }
+    for (final c in [_oneMinutes, _solar, _diesel, _cash, _paid, _note, _manualPerson]) { c.dispose(); }
     super.dispose();
   }
 
@@ -1961,9 +1960,7 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
     setState(() => _saving = true);
     try {
       final now = DateTime.now();
-      final exchangeOwedMinutes = (int.tryParse(_exchange.text.trim()) ?? 0) > 0
-          ? int.parse(_exchange.text.trim())
-          : mins.values.fold<int>(0, (sum, value) => sum + value);
+      final exchangeOwedMinutes = mins.values.fold<int>(0, (sum, value) => sum + value);
       final contactName = _manualPerson.text.trim().isNotEmpty
           ? _manualPerson.text.trim()
           : (_person.trim().isEmpty ? 'Samne wala' : _person.trim());
@@ -2049,9 +2046,6 @@ class _AddKuaHisabScreenState extends State<AddKuaHisabScreen> {
       ] else
         TextField(controller: _oneMinutes, keyboardType: TextInputType.number,
           decoration: InputDecoration(labelText: _well == 'Both same' ? 'Dono ke minutes (ek baar)' : 'Minutes')),
-      const SizedBox(height: 12),
-      TextField(controller: _exchange, keyboardType: TextInputType.number,
-        decoration: const InputDecoration(labelText: 'Badle mein pani ke minutes (optional; blank chhode to jitne diye utne pending)')),
       const SizedBox(height: 12),
       TextField(controller: _cash, keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: const InputDecoration(labelText: 'Cash/rent ka total (₹)')),
