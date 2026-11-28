@@ -1370,18 +1370,150 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
   }
 }
 class KhetVendorLedgerDashboardScreen extends StatefulWidget {
- const KhetVendorLedgerDashboardScreen({required this.vendorId,required this.vendorName,required this.rows,super.key});
- final String vendorId,vendorName; final List<Map<String,dynamic>> rows;
- @override State<KhetVendorLedgerDashboardScreen> createState()=>_KhetVendorLedgerDashboardScreenState();
+  const KhetVendorLedgerDashboardScreen({
+    required this.vendorId,
+    required this.vendorName,
+    required this.rows,
+    super.key,
+  });
+
+  final String vendorId, vendorName;
+  final List<Map<String, dynamic>> rows;
+
+  @override
+  State<KhetVendorLedgerDashboardScreen> createState() =>
+      _KhetVendorLedgerDashboardScreenState();
 }
-class _KhetVendorLedgerDashboardScreenState extends State<KhetVendorLedgerDashboardScreen>{
- double n(dynamic v)=>v is num?v.toDouble():double.tryParse((v??'').toString())??0;
- List<Map<String,dynamic>> get purchases=>widget.rows.where((r)=>r['type']=='KHET_PURCHASE'&&r['vendorId']==widget.vendorId).toList();
- List<Map<String,dynamic>> get payments=>widget.rows.where((r)=>r['type']=='KHET_PURCHASE_PAYMENT'&&r['vendorId']==widget.vendorId).toList();
- double get balance=>purchases.fold<double>(0,(s,r)=>s+n(r['totalAmount'])-n(r['paidAmount']))-payments.fold<double>(0,(s,r)=>s+n(r['amount']));
- Future<void> pay()async{final c=TextEditingController();final result=await showDialog<double>(context:context,builder:(ctx)=>AlertDialog(title:Text('Payment · ${widget.vendorName}'),content:Column(mainAxisSize:MainAxisSize.min,children:[Text('Remaining: ₹${balance.toStringAsFixed(0)}'),TextField(controller:c,keyboardType:const TextInputType.numberWithOptions(decimal:true),decoration:const InputDecoration(labelText:'Payment amount (full/partial)'))]),actions:[TextButton(onPressed:()=>Navigator.pop(ctx),child:const Text('Cancel')),FilledButton(onPressed:(){final v=double.tryParse(c.text);if(v!=null&&v>0)Navigator.pop(ctx,v);},child:const Text('Save'))]));c.dispose();if(result==null)return;await StorageBackupService.instance.addRecord('khet',{'id':DateTime.now().microsecondsSinceEpoch.toString(),'type':'KHET_PURCHASE_PAYMENT','vendorId':widget.vendorId,'vendorName':widget.vendorName,'amount':result,'date':DateTime.now().toIso8601String(),'allocationMethod':'OLDEST_BILL_FIRST','balanceBefore':balance,'balanceAfter':(balance-result).clamp(0,double.infinity)});if(mounted)setState((){});}
- @override Widget build(BuildContext context){final p=purchases..sort((a,b)=>(a['date']??'').toString().compareTo((b['date']??'').toString()));final paidAt=p.fold<double>(0,(s,r)=>s+n(r['paidAmount'])),paidLater=payments.fold<double>(0,(s,r)=>s+n(r['amount']));final fmt=NumberFormat.currency(locale:'en_IN',symbol:'₹',decimalDigits:0);return Scaffold(appBar:AppBar(title:Text('${widget.vendorName} · Khata')),body:ListView(padding:const EdgeInsets.all(16),children:[Card(child:ListTile(title:const Text('Total purchase'),trailing:Text(fmt.format(p.fold<double>(0,(s,r)=>s+n(r['totalAmount'])))))),Card(child:ListTile(title:const Text('Paid at purchase'),trailing:Text(fmt.format(paidAt)))),Card(child:ListTile(title:const Text('Payments later'),trailing:Text(fmt.format(paidLater)))),Card(child:ListTile(title:Text(balance>=0?'Net pending':'Advance'),trailing:Text(fmt.format(balance.abs()),style:TextStyle(fontWeight:FontWeight.bold,color:balance>0?Colors.red:Colors.green)))),const SizedBox(height:10),const Text('Bills',style:TextStyle(fontWeight:FontWeight.bold,fontSize:18)),...p.map((r){final b=n(r['totalAmount'])-n(r['paidAmount']);return Card(child:ListTile(title:Text((r['title']??'Purchase').toString()),subtitle:Text('Bill ${fmt.format(n(r['totalAmount']))} · Paid ${fmt.format(n(r['paidAmount']))} · ${DateFormat('dd MMM yyyy').format(DateTime.tryParse(r['invoiceDate']??r['date']??'')??DateTime.now())}'),trailing:Text(fmt.format(b.clamp(0,double.infinity)),style:TextStyle(color:b>0?Colors.red:Colors.green,fontWeight:FontWeight.bold))));})]),floatingActionButton:FloatingActionButton.extended(onPressed:pay,icon:const Icon(Icons.payments),label:const Text('Full / Partial Payment')));}
+
+class _KhetVendorLedgerDashboardScreenState
+    extends State<KhetVendorLedgerDashboardScreen> {
+  double n(dynamic value) => value is num
+      ? value.toDouble()
+      : double.tryParse((value ?? '').toString()) ?? 0;
+
+  List<Map<String, dynamic>> get purchases => widget.rows
+      .where((row) => row['type'] == 'KHET_PURCHASE' &&
+          row['vendorId'] == widget.vendorId)
+      .toList();
+
+  List<Map<String, dynamic>> get payments => widget.rows
+      .where((row) => row['type'] == 'KHET_PURCHASE_PAYMENT' &&
+          row['vendorId'] == widget.vendorId)
+      .toList();
+
+  double get balance =>
+      purchases.fold<double>(0, (sum, row) =>
+          sum + n(row['totalAmount']) - n(row['paidAmount'])) -
+      payments.fold<double>(0, (sum, row) => sum + n(row['amount']));
+
+  Future<void> pay() async {
+    final controller = TextEditingController();
+    final before = balance;
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Payment · ${widget.vendorName}'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Remaining: ₹${before.toStringAsFixed(0)}'),
+          TextField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Payment amount (full/partial)'),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final value = double.tryParse(controller.text.trim()) ?? 0;
+              if (value <= 0 || value > before) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  SnackBar(content: Text('1 se ₹${before.toStringAsFixed(0)} ke beech amount bharein')),
+                );
+                return;
+              }
+              Navigator.pop(ctx, value);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null) return;
+    final after = (before - result).clamp(0, double.infinity).toDouble();
+    await StorageBackupService.instance.addRecord('khet', {
+      'id': DateTime.now().microsecondsSinceEpoch.toString(),
+      'type': 'KHET_PURCHASE_PAYMENT',
+      'vendorId': widget.vendorId,
+      'vendorName': widget.vendorName,
+      'amount': result,
+      'date': DateTime.now().toIso8601String(),
+      'allocationMethod': 'OLDEST_BILL_FIRST',
+      'balanceBefore': before,
+      'balanceAfter': after,
+    });
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bills = purchases
+      ..sort((a, b) => (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
+    final paymentRows = payments
+      ..sort((a, b) => (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
+    final bought = bills.fold<double>(0, (sum, row) => sum + n(row['totalAmount']));
+    final paidAtPurchase = bills.fold<double>(0, (sum, row) => sum + n(row['paidAmount']));
+    final paidLater = paymentRows.fold<double>(0, (sum, row) => sum + n(row['amount']));
+    final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+
+    return Scaffold(
+      appBar: AppBar(title: Text('${widget.vendorName} · Khata')),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        Card(child: ListTile(title: const Text('Total purchase'), trailing: Text(money.format(bought)))),
+        Card(child: ListTile(title: const Text('Paid at purchase'), trailing: Text(money.format(paidAtPurchase)))),
+        Card(child: ListTile(title: const Text('Payments later'), trailing: Text(money.format(paidLater)))),
+        Card(child: ListTile(
+          title: Text(balance >= 0 ? 'Net pending' : 'Advance'),
+          trailing: Text(money.format(balance.abs()), style: TextStyle(fontWeight: FontWeight.bold, color: balance > 0 ? Colors.red : Colors.green)),
+        )),
+        const SizedBox(height: 10),
+        const Text('Bills', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        ...bills.map((row) {
+          final outstanding = (n(row['totalAmount']) - n(row['paidAmount'])).clamp(0, double.infinity);
+          final date = DateTime.tryParse((row['invoiceDate'] ?? row['date'] ?? '').toString());
+          return Card(child: ListTile(
+            title: Text((row['title'] ?? 'Purchase').toString()),
+            subtitle: Text('Bill ${money.format(n(row['totalAmount']))} · Paid ${money.format(n(row['paidAmount']))} · ${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}'),
+            trailing: Text(money.format(outstanding), style: TextStyle(color: outstanding > 0 ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
+          ));
+        }),
+        const SizedBox(height: 12),
+        const Text('Payment history', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        if (paymentRows.isEmpty) const Padding(
+          padding: EdgeInsets.all(12),
+          child: Text('Abhi koi later payment record nahi hai.'),
+        ),
+        ...paymentRows.reversed.map((row) {
+          final date = DateTime.tryParse((row['date'] ?? '').toString());
+          final before = row['balanceBefore'] == null ? null : n(row['balanceBefore']);
+          final after = row['balanceAfter'] == null ? null : n(row['balanceAfter']);
+          return Card(child: ListTile(
+            leading: const Icon(Icons.payments_outlined),
+            title: Text('Payment ${money.format(n(row['amount']))}'),
+            subtitle: Text('${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}${before == null || after == null ? '' : '\\nPehle baki ${money.format(before)} · Baad mein baki ${money.format(after)}'}${(row['note'] ?? '').toString().trim().isEmpty ? '' : '\\n${row['note']}'}'),
+          ));
+        }),
+      ]),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: pay,
+        icon: const Icon(Icons.payments),
+        label: const Text('Full / Partial Payment'),
+      ),
+    );
+  }
 }
+
 class _MonthVendorPurchasesScreen extends StatelessWidget {
   const _MonthVendorPurchasesScreen({
     required this.rows, required this.allRows, required this.monthTitle, required this.money,
