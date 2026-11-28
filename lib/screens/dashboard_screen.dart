@@ -944,6 +944,88 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     noteController.dispose(); minutesController.dispose(); if (mounted) setState(() {});
   }
 
+  Future<void> _recordKuaCashPayment(Map<String, dynamic> pendingRow) async {
+    final matches = widget.storage.records('khet')
+        .where((r) => r['id']?.toString() == pendingRow['id']?.toString() && r['type'] == 'KUA')
+        .toList();
+    if (matches.isEmpty) return;
+    final original = matches.first;
+    final total = _amount(original['cashAmount']);
+    final paid = _amount(original['cashPaid']);
+    final before = (total - paid).clamp(0, double.infinity).toDouble();
+    final amountController = TextEditingController();
+    final noteController = TextEditingController();
+    DateTime paymentDate = DateTime.now();
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
+        title: Text('Kua cash payment · ${original['contact'] ?? 'Person'}'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Pehle baki: ${widget.money.format(before)}'),
+          TextField(controller: amountController, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Ab kitne paise mile?')),
+          TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note (optional)')),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.calendar_today),
+            label: Text('Date: ${DateFormat('dd MMM yyyy').format(paymentDate)}'),
+            onPressed: () async {
+              final picked = await showDatePicker(context: ctx, initialDate: paymentDate,
+                firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 3650)));
+              if (picked != null) setDialog(() => paymentDate = picked);
+            },
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(onPressed: () {
+            final amount = double.tryParse(amountController.text.trim()) ?? 0;
+            if (amount <= 0 || amount > before) {
+              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('1 se ${widget.money.format(before)} ke beech rakam bharein')));
+              return;
+            }
+            Navigator.pop(ctx, {'amount': amount, 'date': paymentDate, 'note': noteController.text.trim()});
+          }, child: const Text('Save payment')),
+        ],
+      )),
+    );
+    amountController.dispose();
+    noteController.dispose();
+    if (result == null) return;
+    final amount = (result['amount'] as num).toDouble();
+    final after = (before - amount).clamp(0, double.infinity).toDouble();
+    final history = (original['payments'] as List? ?? const [])
+        .whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    history.add({
+      'amount': amount,
+      'direction': 'Diya',
+      'date': (result['date'] as DateTime).toIso8601String(),
+      'note': result['note'],
+      'balanceBefore': before,
+      'balanceAfter': after,
+    });
+    final updated = Map<String, dynamic>.from(original)
+      ..['cashPaid'] = paid + amount
+      ..['cashBalance'] = after
+      ..['cashStatus'] = after <= 0.009 ? 'PAID' : 'PARTIAL'
+      ..['payments'] = history
+      ..['updatedAt'] = DateTime.now().toIso8601String();
+    await widget.storage.updateRecord('khet', original['id'].toString(), updated);
+    final index = widget.rows.indexWhere((r) => r['id']?.toString() == original['id'].toString() && r['pendingKind'] == 'KUA_CASH');
+    if (index >= 0) {
+      if (after <= 0.009) {
+        widget.rows.removeAt(index);
+      } else {
+        widget.rows[index] = {
+          ...widget.rows[index],
+          'paidAmount': paid + amount,
+          'balance': after,
+          'dashboardBalance': after,
+        };
+      }
+    }
+    if (mounted) setState(() {});
+  }
+
   Future<void> _addPlan() async {
     final titleController = TextEditingController();
     final noteController = TextEditingController();
@@ -1156,6 +1238,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
             final due = DateTime.tryParse(row['dueDate']?.toString() ?? '');
             final isPurchase = row['pendingKind'] == 'PURCHASE';
             final isKhetExpense = row['pendingKind'] == 'KHET_EXPENSE';
+            final isKuaCash = row['pendingKind'] == 'KUA_CASH';
             final person = (row['personName'] ?? row['vendorName'] ?? row['customerName'] ?? row['contact'] ?? 'Person').toString();
             final total = _amount(row['totalAmount'] ?? row['amount']);
             final paid = _amount(row['paidAmount']);
@@ -1172,21 +1255,25 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
                   isPurchase
                       ? 'Purchase bill ₹${total.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)}'
                         '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}'
-                      : isKhetExpense
-                          ? '${row['expenseCategory'] ?? 'Khet expense'} · Total ₹${total.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)}'
-                          : '${row['work'] ?? row['title'] ?? 'Tractor work'}'
-                            '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}',
+                      : isKuaCash
+                          ? 'Kua rent/cash ₹${total.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)}'
+                          : isKhetExpense
+                              ? '${row['expenseCategory'] ?? 'Khet expense'} · Total ₹${total.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)}'
+                              : '${row['work'] ?? row['title'] ?? 'Tractor work'}'
+                                '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}',
                 ),
                 trailing: Text(widget.money.format(_balance(row)), style: const TextStyle(color: Colors.red,fontWeight: FontWeight.bold)),
-                onTap: isPurchase ? () {
-                  Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => KhetVendorLedgerDashboardScreen(
-                      vendorId: row['vendorId'].toString(),
-                      vendorName: (row['vendorName'] ?? 'Shop').toString(),
-                      rows: widget.storage.records('khet'),
-                    ),
-                  ));
-                } : null,
+                onTap: isPurchase
+                    ? () {
+                        Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => KhetVendorLedgerDashboardScreen(
+                            vendorId: row['vendorId'].toString(),
+                            vendorName: (row['vendorName'] ?? 'Shop').toString(),
+                            rows: widget.storage.records('khet'),
+                          ),
+                        ));
+                      }
+                    : isKuaCash ? () => _recordKuaCashPayment(row) : null,
               ),
             );
           }),
