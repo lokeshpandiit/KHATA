@@ -1033,19 +1033,27 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
           ...widget.rows.map((row) {
             final due = DateTime.tryParse(row['dueDate']?.toString() ?? '');
             final isPurchase = row['pendingKind'] == 'PURCHASE';
+            final isKhetExpense = row['pendingKind'] == 'KHET_EXPENSE';
+            final person = (row['personName'] ?? row['vendorName'] ?? row['customerName'] ?? row['contact'] ?? 'Person').toString();
+            final total = _amount(row['totalAmount'] ?? row['amount']);
+            final paid = _amount(row['paidAmount']);
             return Card(
               child: ListTile(
                 title: Text(
-                  row['pendingKind'] == 'PURCHASE'
+                  isPurchase
                       ? '${row['vendorName'] ?? 'Shop'} · ${row['title'] ?? 'Purchase'}'
-                      : (row['customerName'] ?? row['contact'] ?? 'Customer').toString(),
+                      : isKhetExpense
+                          ? '$person · ${row['title'] ?? 'Khet expense'}'
+                          : (row['customerName'] ?? row['contact'] ?? 'Customer').toString(),
                 ),
                 subtitle: Text(
-                  row['pendingKind'] == 'PURCHASE'
-                      ? 'Purchase bill ₹${_amount(row['totalAmount']).toStringAsFixed(0)} · Paid ₹${_amount(row['paidAmount']).toStringAsFixed(0)}'
+                  isPurchase
+                      ? 'Purchase bill ₹${total.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)}'
                         '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}'
-                      : '${row['work'] ?? row['title'] ?? 'Tractor work'}'
-                        '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}',
+                      : isKhetExpense
+                          ? '${row['expenseCategory'] ?? 'Khet expense'} · Total ₹${total.toStringAsFixed(0)} · Paid ₹${paid.toStringAsFixed(0)}'
+                          : '${row['work'] ?? row['title'] ?? 'Tractor work'}'
+                            '${due == null ? '' : '\nDue: ${DateFormat('dd MMM yyyy').format(due)}'}',
                 ),
                 trailing: Text(widget.money.format(_balance(row)), style: const TextStyle(color: Colors.red,fontWeight: FontWeight.bold)),
                 onTap: isPurchase ? () {
