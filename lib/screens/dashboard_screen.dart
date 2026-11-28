@@ -632,11 +632,12 @@ class _PersonMonthDetailScreenState extends State<_PersonMonthDetailScreen> {
         row['type'] == 'KHET_PURCHASE_PAYMENT' && row['vendorId'] == vendorId
       ).toList();
       final vendorPaymentNet = vendorPayments.fold<double>(0, (sum, row) => sum + _amount(row['amount']));
+      final initialPaid = vendorBills.fold<double>(0, (sum, row) => sum + _amount(row['paidAmount']));
       final vendorDue = (vendorBills.fold<double>(0, (sum, row) =>
         sum + _amount(row['totalAmount']) - _amount(row['paidAmount'])) - vendorPaymentNet);
       final available = direction == 'Diya'
           ? vendorDue.clamp(0, double.infinity).toDouble()
-          : vendorPaymentNet.clamp(0, double.infinity).toDouble();
+          : (initialPaid + vendorPaymentNet).clamp(0, double.infinity).toDouble();
       if (available <= 0.009) continue;
       final take = remaining < available ? remaining : available;
       final signedAmount = direction == 'Diya' ? take : -take;
@@ -1875,7 +1876,8 @@ class _KhetVendorLedgerDashboardScreenState
     final controller = TextEditingController();
     final noteController = TextEditingController();
     final before = balance;
-    final paidLater = payments.fold<double>(0, (sum, row) => sum + n(row['amount']));
+    final refundablePaid = purchases.fold<double>(0, (sum, row) => sum + n(row['paidAmount'])) +
+        payments.fold<double>(0, (sum, row) => sum + n(row['amount']));
     String direction = 'Diya';
     DateTime paymentDate = DateTime.now();
     final result = await showDialog<Map<String, dynamic>>(
@@ -1916,7 +1918,7 @@ class _KhetVendorLedgerDashboardScreenState
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(onPressed: () {
             final value = double.tryParse(controller.text.trim()) ?? 0;
-            final limit = direction == 'Diya' ? before.clamp(0, double.infinity).toDouble() : paidLater.clamp(0, double.infinity).toDouble();
+            final limit = direction == 'Diya' ? before.clamp(0, double.infinity).toDouble() : refundablePaid.clamp(0, double.infinity).toDouble();
             if (value <= 0 || value > limit + 0.009) {
               ScaffoldMessenger.of(ctx).showSnackBar(
                 SnackBar(content: Text('1 se ₹${limit.toStringAsFixed(0)} ke beech amount bharein')),
