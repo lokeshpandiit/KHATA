@@ -640,6 +640,26 @@ class _KhetExpensesScreenState extends State<_KhetExpensesScreen> {
         .toString().trim().toLowerCase();
   }
 
+  String _plotSummary(Map<String, dynamic> row) {
+    final ids = (row['plotIds'] as List? ?? const [])
+        .map((id) => id.toString()).where((id) => id.isNotEmpty).toList();
+    if (ids.isNotEmpty) {
+      final savedLabels = (row['plotLabelsSnapshot'] as List? ?? const [])
+          .map((label) => label.toString()).where((label) => label.isNotEmpty).toList();
+      final labels = savedLabels.isNotEmpty
+          ? savedLabels
+          : StorageBackupService.instance.records('plots')
+              .where((plot) => ids.contains(plot['id'].toString()))
+              .map(plotLabel).toList();
+      return 'सामूहिक खर्च · ${ids.length} किले${labels.isEmpty ? '' : ': ${labels.join(', ')}'}';
+    }
+    if (row['plotId'] != null) {
+      final label = plotLabelForId(StorageBackupService.instance, row['plotId']);
+      return label.isEmpty ? 'एक किले के लिए' : label;
+    }
+    return 'पूरे खेत के लिए';
+  }
+
   @override
   Widget build(BuildContext context) {
     final expenses = widget.rows.where(_isExpense).toList();
@@ -758,7 +778,7 @@ class _KhetExpensesScreenState extends State<_KhetExpensesScreen> {
           final amount = _total(row);
           final paid = _amount(row['paidAmount']);
           final person = (row['personName'] ?? row['vendorName'] ?? row['customerName'] ?? row['contact'] ?? '').toString().trim();
-          final plot = plotLabelForId(StorageBackupService.instance, row['plotId']);
+          final plot = _plotSummary(row);
           final title = (row['title'] ?? row['work'] ?? row['workType'] ?? _category(row)).toString();
           final details = <String>[
             if (date != null) DateFormat('dd MMM yyyy').format(date),
