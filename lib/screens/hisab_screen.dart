@@ -392,9 +392,15 @@ class _AddHisabScreenState extends State<AddHisabScreen> {
         ? _title.text.trim()
         : (_expenseCategory == 'Tractor' ? _tractorWork : _expenseCategory);
 
-    if (!isExpense && _category == 'Khet' && person.isEmpty) {
-      _error('Paise lene ya dene par vyakti ka naam zaroor bharein');
-      return;
+    if (!isExpense && _category == 'Khet') {
+      if (person.isEmpty) {
+        _error('Paise lene ya dene par vyakti ka naam zaroor bharein');
+        return;
+      }
+      if (total <= 0) {
+        _error('Paise lene ya dene ki sahi rakam bharein');
+        return;
+      }
     }
 
     if (isExpense) {
