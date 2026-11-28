@@ -1734,7 +1734,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
               }),
             )
           else if (!(widget.type == 'DAWAI' && _khalaOnly))
-            KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+            _tractorPlotScopeFields(),
 
           if (farmPlot) ...[
             const SizedBox(height: 8),
@@ -2053,6 +2053,8 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
   String? _customerName;
   String? _customerPhone;
   String? _plotId;
+  String _plotScope = 'KHET';
+  final List<String> _plotIds = [];
   DateTime? _dueDate;
   bool _saving = false;
 
@@ -2083,6 +2085,91 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
     } catch (error) {
       _error('Could not pick customer: $error');
     }
+  }
+
+  List<Map<String, dynamic>> get _ownedPlots => _storage.records('plots')
+      .where((plot) => plot['isMine'] == true)
+      .toList();
+
+  List<String> _selectedPlotLabels() {
+    final labels = <String>[];
+    for (final plot in _ownedPlots.where((plot) => _plotIds.contains(plot['id'].toString()))) {
+      final crop = currentCropForPlot(_storage, plot['id']);
+      labels.add(crop.isEmpty ? plotLabel(plot) : '${plotLabel(plot)} ($crop)');
+    }
+    return labels;
+  }
+
+  Future<void> _pickMultiplePlots() async {
+    final plots = _ownedPlots;
+    if (plots.isEmpty) {
+      _error('Pehle Khet Map mein apne kille add karein.');
+      return;
+    }
+    final picked = await showModalBottomSheet<List<String>>(
+      context: context, isScrollControlled: true,
+      builder: (sheetContext) {
+        final temporary = List<String>.from(_plotIds);
+        return StatefulBuilder(
+          builder: (context, setSheetState) => SafeArea(
+            child: SizedBox(height: MediaQuery.of(context).size.height * 0.72,
+              child: Column(children: [
+                Padding(padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
+                  child: Row(children: [
+                    const Expanded(child: Text('Tractor work ke kille select karein',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800))),
+                    IconButton(onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close)),
+                  ])),
+                Expanded(child: ListView(children: plots.map((plot) {
+                  final id = plot['id'].toString();
+                  final crop = currentCropForPlot(_storage, id);
+                  final label = crop.isEmpty ? '${plotLabel(plot)} (Fasal nahi)' : '${plotLabel(plot)} ($crop)';
+                  return CheckboxListTile(value: temporary.contains(id), title: Text(label),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    onChanged: (checked) => setSheetState(() {
+                      if (checked == true) { if (!temporary.contains(id)) temporary.add(id); }
+                      else { temporary.remove(id); }
+                    }));
+                }).toList())),
+                Padding(padding: const EdgeInsets.all(16), child: SizedBox(width: double.infinity,
+                  child: FilledButton(onPressed: () => Navigator.pop(sheetContext, temporary),
+                    child: Text('Done · ${temporary.length} kille selected')))),
+              ]),
+            ),
+          ),
+        );
+      },
+    );
+    if (picked != null && mounted) setState(() => _plotIds..clear()..addAll(picked));
+  }
+
+  Widget _tractorPlotScopeFields() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DropdownButtonFormField<String>(
+        initialValue: _plotScope,
+        decoration: const InputDecoration(labelText: 'Killa / Field', prefixIcon: Icon(Icons.grid_view_outlined)),
+        items: const [
+          DropdownMenuItem(value: 'KHET', child: Text('पूरा खेत')),
+          DropdownMenuItem(value: 'SINGLE', child: Text('एक किला')),
+          DropdownMenuItem(value: 'MULTIPLE', child: Text('कई किले (Multiple Selection)')),
+        ],
+        onChanged: (value) => setState(() {
+          _plotScope = value ?? 'KHET';
+          if (_plotScope != 'SINGLE') _plotId = null;
+          if (_plotScope != 'MULTIPLE') _plotIds.clear();
+        }),
+      ),
+      if (_plotScope == 'SINGLE') ...[
+        const SizedBox(height: 10),
+        KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
+      ],
+      if (_plotScope == 'MULTIPLE') ...[
+        const SizedBox(height: 10),
+        OutlinedButton.icon(onPressed: _pickMultiplePlots, icon: const Icon(Icons.checklist),
+          label: Text(_plotIds.isEmpty ? 'Kille select karein' :
+            '${_plotIds.length} kille selected · ${_selectedPlotLabels().join(', ')}')),
+      ],
+    ]);
   }
 
   Future<void> _pickPhotos() async {
@@ -2127,7 +2214,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
       _error('Tractor malik ka naam likhein ya contact se select karein');
       return;
     }
-    if (_work.text.trim().isEmpty || total <= 0 || paid < 0 || paid > total) {
+    if (_plotScope == 'SINGLE' && _plotId == null) {\n      _error('Ek killa select karein, ya poora khet choose karein');\n      return;\n    }\n    if (_plotScope == 'MULTIPLE' && _plotIds.isEmpty) {\n      _error('Kam se kam ek killa select karein');\n      return;\n    }\n    if (_work.text.trim().isEmpty || total <= 0 || paid < 0 || paid > total) {
       _error('Enter work and valid total/paid amount');
       return;
     }
@@ -2141,7 +2228,7 @@ class _AddTractorWorkScreenState extends State<AddTractorWorkScreen> {
         'customerName': _customerName,
         'ownerName': _customerName,
         'customerPhone': (_customerPhone ?? '').trim().isEmpty ? null : _customerPhone,
-        'plotId': _plotId,
+        'plotScope': _plotScope,\n        'plotId': _plotScope == 'SINGLE' ? _plotId : null,\n        'plotIds': _plotScope == 'MULTIPLE' ? List<String>.from(_plotIds) : <String>[],
         'contact': _customerName,
         'work': _work.text.trim(),
         'title': _work.text.trim(),
