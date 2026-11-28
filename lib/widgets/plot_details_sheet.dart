@@ -57,6 +57,7 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
     final pickedIso = DateTime(picked.year, picked.month, picked.day).toIso8601String();
     final updated = Map<String, dynamic>.from(crop)
       ..['harvested'] = !futureHarvest
+      ..['cropCycleStatus'] = futureHarvest ? 'ACTIVE' : 'COMPLETED'
       ..['harvestDate'] = futureHarvest ? null : pickedIso
       ..['plannedHarvestDate'] = futureHarvest ? pickedIso : null
       ..['harvestedAt'] = futureHarvest ? null : DateTime.now().toIso8601String();
