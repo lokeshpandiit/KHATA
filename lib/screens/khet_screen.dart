@@ -928,15 +928,37 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
   }
 
   String? _activeCropCycleId(String plotId, DateTime onDate) {
-    final day = DateTime(onDate.year, onDate.month, onDate.day);
+    final activityDay = DateUtils.dateOnly(onDate);
     final crops = _storage.records('khet').where((row) {
-      if (row['type'] != 'FASAL' || row['plotId'] != plotId || row['harvested'] == true) return false;
-      final parsed = DateTime.tryParse((row['sowingDate'] ?? row['date'] ?? '').toString());
-      return parsed != null && !DateUtils.dateOnly(parsed).isAfter(day);
+      if (row['type'] != 'FASAL' ||
+          row['plotId'] != plotId ||
+          row['harvested'] == true ||
+          row['cropCycleStatus'] == 'COMPLETED') {
+        return false;
+      }
+      final sowingDate = DateTime.tryParse(
+        (row['sowingDate'] ?? row['date'] ?? '').toString(),
+      );
+      if (sowingDate == null || DateUtils.dateOnly(sowingDate).isAfter(activityDay)) {
+        return false;
+      }
+      final harvestDate = DateTime.tryParse((row['harvestDate'] ?? '').toString());
+      return harvestDate == null ||
+          !activityDay.isAfter(DateUtils.dateOnly(harvestDate));
     }).toList();
-    crops.sort((a,b) => DateTime.tryParse((b['sowingDate'] ?? b['date'] ?? '').toString())!
-      .compareTo(DateTime.tryParse((a['sowingDate'] ?? a['date'] ?? '').toString())!));
-    return crops.isEmpty ? null : crops.first['cropCycleId']?.toString();
+    crops.sort((a, b) {
+      final aDate = DateTime.tryParse((a['sowingDate'] ?? a['date'] ?? '').toString()) ?? DateTime(0);
+      final bDate = DateTime.tryParse((b['sowingDate'] ?? b['date'] ?? '').toString()) ?? DateTime(0);
+      return bDate.compareTo(aDate);
+    });
+    if (crops.isEmpty) return null;
+    final crop = crops.first;
+    final cycleId = crop['cropCycleId']?.toString();
+    // Older crop entries did not have a cycle ID. A stable fallback keeps
+    // their history separate without rewriting the user's existing records.
+    return cycleId != null && cycleId.isNotEmpty
+        ? cycleId
+        : 'legacy_${crop['id'] ?? plotId}';
   }
 
   Future<void> _save() async {
@@ -1293,33 +1315,34 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
 
   Map<String, dynamic>? _currentCropFor(String? plotId) {
     if (plotId == null) return null;
-    final applicationDay = DateTime(
-      _activityDate.year,
-      _activityDate.month,
-      _activityDate.day,
-    );
-    DateTime? sowingDate(Map<String, dynamic> row) {
-      return DateTime.tryParse(
-        (row['sowingDate'] ?? row['date'] ?? '').toString(),
-      );
-    }
+    final applicationDay = DateUtils.dateOnly(_activityDate);
+    DateTime? sowingDate(Map<String, dynamic> row) =>
+        DateTime.tryParse((row['sowingDate'] ?? row['date'] ?? '').toString());
 
-    final crops = _storage.records('khet')
-        .where((row) =>
-            row['type'] == 'FASAL' &&
-            row['plotId'] == plotId &&
-            row['harvested'] != true)
-        .where((row) {
-          final date = sowingDate(row);
-          if (date == null) return false;
-          final sowingDay = DateTime(date.year, date.month, date.day);
-          return !sowingDay.isAfter(applicationDay);
-        })
-        .toList();
-    crops.sort((a, b) =>
-      (sowingDate(b) ?? DateTime(0))
-      .compareTo(sowingDate(a) ?? DateTime(0)));
-    return crops.isEmpty ? null : crops.first;
+    final crops = _storage.records('khet').where((row) {
+      if (row['type'] != 'FASAL' ||
+          row['plotId'] != plotId ||
+          row['harvested'] == true ||
+          row['cropCycleStatus'] == 'COMPLETED') {
+        return false;
+      }
+      final sowing = sowingDate(row);
+      if (sowing == null || DateUtils.dateOnly(sowing).isAfter(applicationDay)) {
+        return false;
+      }
+      final harvest = DateTime.tryParse((row['harvestDate'] ?? '').toString());
+      return harvest == null ||
+          !applicationDay.isAfter(DateUtils.dateOnly(harvest));
+    }).toList()
+      ..sort((a, b) => (sowingDate(b) ?? DateTime(0))
+          .compareTo(sowingDate(a) ?? DateTime(0)));
+    if (crops.isEmpty) return null;
+    final crop = Map<String, dynamic>.from(crops.first);
+    final id = crop['cropCycleId']?.toString();
+    crop['cropCycleId'] = id != null && id.isNotEmpty
+        ? id
+        : 'legacy_${crop['id'] ?? plotId}';
+    return crop;
   }
 
   @override
