@@ -66,7 +66,9 @@ class _VoiceNotesScreenState extends State<VoiceNotesScreen> {
       if (lower.contains('कीटनाशक') || lower.contains('insecticide')) items.add('कीटनाशक');
       if (items.isEmpty) items.add('सामान खरीदा');
       final person = _extractPerson(t, fromMarkers: ['से', 'se'], toMarkers: ['को', 'ko']);
-      return person == null ? '${items.join(' और ')} खरीदी' : '${items.join(' और ')} खरीदी - ${person} से';
+      final amount = _extractAmount(t);
+      final base = person == null ? '${items.join(' और ')} खरीदी' : '${items.join(' और ')} खरीदी - ${person} से';
+      return amount == null ? base : '$base - ₹$amount';
     }
 
     // Money transactions: distinguish money received from money paid.
@@ -82,13 +84,36 @@ class _VoiceNotesScreenState extends State<VoiceNotesScreen> {
           lower.contains('मिले') || lower.contains('mila') || lower.contains('received') ||
           lower.contains('वापस मिला');
       final person = _extractPerson(t, fromMarkers: ['से', 'se'], toMarkers: ['को', 'ko']);
-      if (paid && person != null) return '$person को पैसे दिए';
-      if (received && person != null) return '$person से पैसे लिए';
-      if (paid) return 'पैसे दिए';
-      if (received) return 'पैसे लिए';
-      return 'पैसों का लेन-देन';
+      final amount = _extractAmount(t);
+      final suffix = amount == null ? '' : ' - ₹$amount';
+      if (paid && person != null) return '$person को पैसे दिए$suffix';
+      if (received && person != null) return '$person से पैसे लिए$suffix';
+      if (paid) return 'पैसे दिए$suffix';
+      if (received) return 'पैसे लिए$suffix';
+      return 'पैसों का लेन-देन$suffix';
     }
     return 'Voice Note';
+  }
+
+  String? _extractAmount(String text) {
+    // Capture numeric amount, including Hindi digits, when spoken in the note.
+    final normalized = text
+        .replaceAll('०', '0').replaceAll('१', '1').replaceAll('२', '2')
+        .replaceAll('३', '3').replaceAll('४', '4').replaceAll('५', '5')
+        .replaceAll('६', '6').replaceAll('७', '7').replaceAll('८', '8')
+        .replaceAll('९', '9');
+    final matches = RegExp(r'(?<![A-Za-z])(?:₹|rs\\.?\\s*)?([0-9]+(?:,[0-9]{3})*(?:\\.[0-9]+)?)(?![A-Za-z])', caseSensitive: false).allMatches(normalized);
+    if (matches.isEmpty) return null;
+    // Prefer a number explicitly tied to rupees/amount; otherwise use the first number.
+    for (final match in matches) {
+      final value = match.group(1)?.replaceAll(',', '');
+      if (value == null) continue;
+      final after = normalized.substring(match.end).toLowerCase();
+      final before = normalized.substring(0, match.start).toLowerCase();
+      if (after.startsWith(RegExp(r'\\s*(रुपये|रुपए|रुपया|rs|rupees|रू)')) ||
+          before.endsWith(RegExp(r'(₹|rs\\.?\\s*)'))) return value;
+    }
+    return matches.first.group(1)?.replaceAll(',', '');
   }
 
   String? _extractPerson(String text, {required List<String> fromMarkers, required List<String> toMarkers}) {
