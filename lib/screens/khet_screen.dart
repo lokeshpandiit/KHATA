@@ -2602,44 +2602,60 @@ class _KhetVendorLedgerScreenState extends State<KhetVendorLedgerScreen> {
   Future<void> _addPayment() async {
     final amount = TextEditingController(), note = TextEditingController();
     DateTime date = DateTime.now();
+    String direction = 'Diya';
+    final before = balance;
+    final paidLaterBefore = payments.fold<double>(0, (sum, row) => sum + _n(row['amount']));
     final result = await showDialog<Map<String, dynamic>>(context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, setD) => AlertDialog(
         title: Text('Payment · ${widget.vendorName}'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Current balance ₹${balance.toStringAsFixed(0)}'),
+          Text('Current balance ₹${before.toStringAsFixed(0)}'),
+          DropdownButtonFormField<String>(
+            value: direction,
+            decoration: const InputDecoration(labelText: 'Payment type'),
+            items: const [
+              DropdownMenuItem(value: 'Diya', child: Text('Paise diye')),
+              DropdownMenuItem(value: 'Liya', child: Text('Paise wapas liye')),
+            ],
+            onChanged: (value) => setD(() => direction = value ?? direction),
+          ),
           TextField(controller: amount, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Payment amount ₹')),
+            decoration: InputDecoration(labelText: direction == 'Diya' ? 'Payment amount ₹' : 'Refund received ₹')),
           TextField(controller: note, decoration: const InputDecoration(labelText: 'Note')),
           OutlinedButton(onPressed: () async {
             final d = await showDatePicker(context: ctx, initialDate: date,
-              firstDate: DateTime(DateTime.now().year - 8), lastDate: DateTime(DateTime.now().year + 8));
+              firstDate: DateTime(2000), lastDate: DateTime.now().add(const Duration(days: 3650)));
             if (d != null) setD(() => date = d);
           }, child: Text('Date: ${dateLabel(date)}')),
+          Text('Iske baad balance ₹${(before + (direction == 'Diya' ? -_n(amount.text) : _n(amount.text))).toStringAsFixed(0)}'),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(onPressed: () {
-            final n = double.tryParse(amount.text);
-            if (n == null || n <= 0 || n > balance) {
+            final n = double.tryParse(amount.text.trim()) ?? 0;
+            final limit = direction == 'Diya' ? before.clamp(0, double.infinity).toDouble() : paidLaterBefore.clamp(0, double.infinity).toDouble();
+            if (n <= 0 || n > limit + 0.009) {
               ScaffoldMessenger.of(ctx).showSnackBar(
-                SnackBar(content: Text('1 se ₹${balance.toStringAsFixed(0)} ke beech payment amount bharein')));
+                SnackBar(content: Text('1 se ₹${limit.toStringAsFixed(0)} ke beech amount bharein')));
               return;
             }
-            Navigator.pop(ctx, {'amount': n, 'note': note.text, 'date': date});
+            Navigator.pop(ctx, {'amount': n, 'direction': direction, 'note': note.text, 'date': date});
           }, child: const Text('Save')),
         ],
       )));
     amount.dispose(); note.dispose();
     if (result == null) return;
-    final balanceBefore = balance;
-    final paidNow = (result['amount'] as num).toDouble();
+    final rawAmount = (result['amount'] as num).toDouble();
+    final directionSaved = result['direction'] as String;
+    final signedAmount = directionSaved == 'Diya' ? rawAmount : -rawAmount;
     await _storage.addRecord('khet', {
       'id': DateTime.now().microsecondsSinceEpoch.toString(), 'type': 'KHET_PURCHASE_PAYMENT',
-      'vendorId': widget.vendorId, 'vendorName': widget.vendorName, 'amount': paidNow,
+      'vendorId': widget.vendorId, 'vendorName': widget.vendorName, 'amount': signedAmount,
+      'direction': directionSaved,
       'date': (result['date'] as DateTime).toIso8601String(), 'note': result['note'],
       'allocationMethod': 'OLDEST_BILL_FIRST',
-      'balanceBefore': balanceBefore,
-      'balanceAfter': (balanceBefore - paidNow).clamp(0, double.infinity)
+      'balanceBefore': before,
+      'balanceAfter': before - signedAmount,
     });
     if (mounted) setState(() {});
   }
