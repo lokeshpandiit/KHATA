@@ -1314,7 +1314,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
                 onChanged: (value) => setState(() => _waterExchangeType = value ?? _waterExchangeType),
               ),
             if (_settlementMode == 'WATER') const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
+            if (_settlementMode == 'MONEY') DropdownButtonFormField<String>(
               initialValue: _wellType,
               decoration: const InputDecoration(labelText: 'किस कुएँ से पानी दिया/लिया?'),
               items: const [
@@ -1323,7 +1323,7 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
               ],
               onChanged: (value) => setState(() => _wellType = value ?? _wellType),
             ),
-            const SizedBox(height: 12),
+            if (_settlementMode == 'MONEY') const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               initialValue: _direction,
               decoration: const InputDecoration(labelText: 'व्यक्ति के साथ पानी का हिसाब'),
