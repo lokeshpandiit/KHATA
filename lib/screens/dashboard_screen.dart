@@ -306,29 +306,35 @@ class _MonthPersonLedgerScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               children: sorted.map((name) {
                 final personRows = people[name]!;
-                final net = personRows.fold<double>(0, (sum, row) => sum + _delta(row));
-                final monthCount = personRows.where((row) {
+                final currentMonthRows = personRows.where((row) {
                   final date = _date(row);
                   return date != null && '${date.year}-${date.month.toString().padLeft(2, '0')}' == selectedMonth;
-                }).length;
-                final status = net > 0.009
-                    ? '₹${money.format(net.abs())} लेना बाकी'
-                    : net < -0.009
-                        ? '₹${money.format(net.abs())} देना बाकी'
-                        : 'हिसाब बराबर ₹0';
+                }).toList();
+                final monthNet = currentMonthRows.fold<double>(0, (sum, row) => sum + _delta(row));
+                final overallNet = personRows.fold<double>(0, (sum, row) => sum + _delta(row));
+                final monthStatus = monthNet > 0.009
+                    ? '₹${money.format(monthNet.abs())} लेना बाकी'
+                    : monthNet < -0.009
+                        ? '₹${money.format(monthNet.abs())} देना बाकी'
+                        : 'इस महीने बराबर ₹0';
+                final overallStatus = overallNet > 0.009
+                    ? 'कुल ₹${money.format(overallNet.abs())} लेना बाकी'
+                    : overallNet < -0.009
+                        ? 'कुल ₹${money.format(overallNet.abs())} देना बाकी'
+                        : 'कुल हिसाब बराबर';
                 return Card(
                   child: ListTile(
                     leading: const CircleAvatar(child: Icon(Icons.person_outline)),
                     title: Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                    subtitle: Text('$monthCount entries this month · ${personRows.length} total entries'),
+                    subtitle: Text('${currentMonthRows.length} entries this month · $overallStatus'),
                     trailing: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 145),
                       child: Text(
-                        status,
+                        monthStatus,
                         textAlign: TextAlign.end,
                         style: TextStyle(
                           fontWeight: FontWeight.w800,
-                          color: net > 0.009 ? Colors.green : net < -0.009 ? Colors.red : Colors.black54,
+                          color: monthNet > 0.009 ? Colors.green : monthNet < -0.009 ? Colors.red : Colors.black54,
                         ),
                       ),
                     ),
@@ -411,6 +417,11 @@ class _PersonMonthDetailScreen extends StatelessWidget {
       (DateTime.tryParse((a['date'] ?? a['invoiceDate'] ?? '').toString()) ?? DateTime(0))
         .compareTo(DateTime.tryParse((b['date'] ?? b['invoiceDate'] ?? '').toString()) ?? DateTime(0)));
     final net = sorted.fold<double>(0, (sum, row) => sum + _delta(row));
+    final currentMonthRows = sorted.where((row) {
+      final date = DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString());
+      return date != null && '${date.year}-${date.month.toString().padLeft(2, '0')}' == selectedMonth;
+    }).toList();
+    final monthNet = currentMonthRows.fold<double>(0, (sum, row) => sum + _delta(row));
     final expenseTotal = sorted.where((row) =>
       row['entryType'] == 'EXPENSE' || row['type'] == 'KHET_PURCHASE' || row['type'] == 'TRACTOR'
     ).fold<double>(0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['amount'] ?? row['price']));
@@ -434,13 +445,15 @@ class _PersonMonthDetailScreen extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('NET BALANCE', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
               const SizedBox(height: 6),
-              Text(status, style: TextStyle(
+              Text('Overall: $status', style: TextStyle(
                 fontSize: 22, fontWeight: FontWeight.w900,
                 color: net > 0.009 ? Colors.green : net < -0.009 ? Colors.red : Colors.black54,
               )),
+              const SizedBox(height: 6),
+              Text('$monthTitle net: ${monthNet > 0.009 ? '₹${money.format(monthNet)} लेना बाकी' : monthNet < -0.009 ? '₹${money.format(monthNet.abs())} देना बाकी' : '₹0 बराबर'}'),
               const SizedBox(height: 8),
               Text('Total purchases / expenses: ${money.format(expenseTotal)}'),
-              Text('$monthTitle: $monthCount transactions · All-time history: ${sorted.length}'),
+              Text('$monthTitle: ${currentMonthRows.length} transactions · All-time history: ${sorted.length}'),
             ]),
           ),
         ),
