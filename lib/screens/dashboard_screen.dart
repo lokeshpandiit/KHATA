@@ -432,12 +432,14 @@ class _PendingPaymentsScreen extends StatefulWidget {
     required this.waterRows,
     required this.money,
     required this.storage,
+    required this.monthTitle,
   });
 
   final List<Map<String, dynamic>> rows;
   final List<Map<String, dynamic>> waterRows;
   final NumberFormat money;
   final StorageBackupService storage;
+  final String monthTitle;
 
   @override
   State<_PendingPaymentsScreen> createState() => _PendingPaymentsScreenState();
