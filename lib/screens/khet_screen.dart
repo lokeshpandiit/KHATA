@@ -2697,7 +2697,7 @@ class _KhetVendorLedgerScreenState extends State<KhetVendorLedgerScreen> {
               '${(r['note'] ?? '').toString().isEmpty ? '' : '\n${r['note']}'}';
             return ListTile(
               leading: Icon(isPurchase ? Icons.shopping_bag : Icons.payments),
-              title: Text(isPurchase ? (r['title'] ?? 'Purchase').toString() : 'Payment ₹${_n(r['amount']).toStringAsFixed(0)}'),
+              title: Text(isPurchase ? (r['title'] ?? 'Purchase').toString() : '${r['direction'] == 'Liya' ? 'Refund received' : 'Payment given'} ₹${_n(r['amount']).abs().toStringAsFixed(0)}'),
               subtitle: Text(subtitle),
             );
           })),
