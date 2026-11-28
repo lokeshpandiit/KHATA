@@ -837,7 +837,7 @@ class _PersonMonthDetailScreenState extends State<_PersonMonthDetailScreen> {
                       : Icons.call_received,
             ),
             title: Text(_title(row)),
-            subtitle: Text('${_subtitle(row, money)}\\nBalance after: $balanceLabel'),
+            subtitle: Text('${_subtitle(row, money)}\nBalance after: $balanceLabel'),
             trailing: Text(
               delta.abs() < 0.009 ? '₹0' : '${delta > 0 ? '+' : '−'}${money.format(delta.abs())}',
               style: TextStyle(fontWeight: FontWeight.w800, color: delta > 0 ? Colors.green : delta < 0 ? Colors.red : Colors.black54),
@@ -1937,7 +1937,7 @@ class _KhetVendorLedgerDashboardScreenState
           return Card(child: ListTile(
             leading: const Icon(Icons.payments_outlined),
             title: Text('${row['direction'] == 'Liya' ? 'Refund received' : 'Payment given'} ${money.format(n(row['amount']).abs())}'),
-            subtitle: Text('${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}${before == null || after == null ? '' : '\\nPehle baki ${money.format(before)} · Baad mein baki ${money.format(after)}'}${(row['note'] ?? '').toString().trim().isEmpty ? '' : '\\n${row['note']}'}'),
+            subtitle: Text('${date == null ? '' : DateFormat('dd MMM yyyy').format(date)}${before == null || after == null ? '' : '\nPehle baki ${money.format(before)} · Baad mein baki ${money.format(after)}'}${(row['note'] ?? '').toString().trim().isEmpty ? '' : '\n${row['note']}'}'),
           ));
         }),
       ]),
