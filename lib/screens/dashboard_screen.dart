@@ -179,181 +179,115 @@ class _MonthPersonLedgerScreen extends StatelessWidget {
 
 class _MonthPaniScreen extends StatelessWidget {
   const _MonthPaniScreen({required this.rows, required this.storage});
-
   final List<Map<String, dynamic>> rows;
   final StorageBackupService storage;
 
-  int _minutes(Map<String, dynamic> row) {
-    final value = row['minutes'];
-    return value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+  int _num(Map<String, dynamic> row, String key) {
+    final v = row[key];
+    return v is num ? v.toInt() : int.tryParse('$v') ?? 0;
   }
-
-  String _formatMinutes(int minutes) => '${minutes ~/ 60}h ${minutes % 60}m';
-
-  String _person(Map<String, dynamic> row) {
-    final borrowed = (row['borrowedMinutes'] as num?)?.toInt() ?? 0;
-    if (borrowed > 0) {
-      final borrowedName = (row['borrowedContact'] ?? row['contact'] ?? '').toString().trim();
-      return borrowedName.isEmpty ? 'Dusre se liya pani' : borrowedName;
-    }
-    return 'Apni baari / apna pani';
+  int _minutes(Map<String, dynamic> row) => _num(row, 'minutes');
+  int _own(Map<String, dynamic> row) {
+    if (row['ownMinutes'] is num) return _num(row, 'ownMinutes');
+    final borrowed = _num(row, 'borrowedMinutes');
+    if (borrowed > 0) return (_minutes(row) - borrowed).clamp(0, 999999);
+    if ((row['direction'] ?? '').toString().toLowerCase().contains('liya')) return 0;
+    return _minutes(row);
+  }
+  int _borrowedNahar(Map<String, dynamic> row) {
+    if (row['borrowedNaharMinutes'] is num) return _num(row, 'borrowedNaharMinutes');
+    final source = (row['borrowedSource'] ?? row['source'] ?? '').toString().toLowerCase();
+    return source.contains('nahar') ? _num(row, 'borrowedMinutes') : 0;
+  }
+  int _borrowedKua(Map<String, dynamic> row) {
+    if (row['borrowedKuaMinutes'] is num) return _num(row, 'borrowedKuaMinutes');
+    final source = (row['borrowedSource'] ?? row['source'] ?? '').toString().toLowerCase();
+    return source.contains('kua') || source.contains('ku') ? _num(row, 'borrowedMinutes') : 0;
+  }
+  String _fmt(int m) => '${m ~/ 60}h ${m % 60}m';
+  void _open(BuildContext context, String title, List<Map<String,dynamic>> data, String kind) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => _PaniCategoryDetail(title: title, rows: data, storage: storage, kind: kind),
+    ));
   }
 
   @override
   Widget build(BuildContext context) {
-    final groups = <String, List<Map<String, dynamic>>>{};
-    for (final row in rows) {
-      groups.putIfAbsent(_person(row), () => []).add(row);
-    }
-    final names = groups.keys.toList()..sort();
-    final totalMinutes = rows.fold<int>(0, (sum, row) => sum + _minutes(row));
-
+    final ownRows = rows.where((r) => _own(r) > 0).toList();
+    final naharRows = rows.where((r) => _borrowedNahar(r) > 0).toList();
+    final kuaRows = rows.where((r) => _borrowedKua(r) > 0).toList();
+    final ownTotal = ownRows.fold<int>(0, (s,r)=>s+_own(r));
+    final naharTotal = naharRows.fold<int>(0, (s,r)=>s+_borrowedNahar(r));
+    final kuaTotal = kuaRows.fold<int>(0, (s,r)=>s+_borrowedKua(r));
+    final borrowedTotal = naharTotal+kuaTotal;
     return Scaffold(
       appBar: AppBar(title: const Text('This month · Pani total')),
-      body: rows.isEmpty
-          ? const Center(child: Text('Is month pani entries nahi hain.'))
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('MONTH TOTAL',
-                            style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 6),
-                        Text(_formatMinutes(totalMinutes),
-                            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.blue)),
-                        Text('${rows.length} entries · ${names.length} groups'),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text('Person-wise pani',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 6),
-                ...names.map((name) {
-                  final personRows = groups[name]!
-                    ..sort((a, b) =>
-                        (DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(0))
-                            .compareTo(DateTime.tryParse(a['date'] as String? ?? '') ?? DateTime(0)));
-                  final personMinutes = personRows.fold<int>(0, (sum, row) => sum + _minutes(row));
-
-                  return Card(
-                    child: ListTile(
-                      leading: const CircleAvatar(child: Icon(Icons.water_drop)),
-                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                      subtitle: Text('${personRows.length} entries · Tap for details'),
-                      trailing: Text(_formatMinutes(personMinutes),
-                          style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.blue)),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => _MonthPaniDetail(
-                            name: name,
-                            rows: personRows,
-                            storage: storage,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ],
-            ),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        const Text('PANI TOTAL', style: TextStyle(fontSize:18,fontWeight:FontWeight.bold)),
+        Card(child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.water_drop)),
+          title: const Text('Apna pani'),
+          subtitle: const Text('Apni baari + apne kua ka apni zameen par laga pani'),
+          trailing: Text(_fmt(ownTotal),style: const TextStyle(fontWeight:FontWeight.bold,color:Colors.blue)),
+          onTap: ()=>_open(context,'Apna pani',ownRows,'own'),
+        )),
+        Card(child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.water_drop_outlined)),
+          title: const Text('Liya pani · Total'),
+          subtitle: Text('Nahar ${_fmt(naharTotal)}  •  Kua ${_fmt(kuaTotal) }'),
+          trailing: Text(_fmt(borrowedTotal),style: const TextStyle(fontWeight:FontWeight.bold,color:Colors.orange)),
+        )),
+        Card(child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.water)),
+          title: const Text('Nahar se liya pani'),
+          subtitle: Text('${naharRows.length} records · Tap for details'),
+          trailing: Text(_fmt(naharTotal),style: const TextStyle(fontWeight:FontWeight.bold,color:Colors.blue)),
+          onTap: ()=>_open(context,'Nahar se liya pani',naharRows,'nahar'),
+        )),
+        Card(child: ListTile(
+          leading: const CircleAvatar(child: Icon(Icons.water)),
+          title: const Text('Kua se liya pani'),
+          subtitle: Text('${kuaRows.length} records · Tap for details'),
+          trailing: Text(_fmt(kuaTotal),style: const TextStyle(fontWeight:FontWeight.bold,color:Colors.blue)),
+          onTap: ()=>_open(context,'Kua se liya pani',kuaRows,'kua'),
+        )),
+      ]),
     );
   }
 }
 
-class _MonthPaniDetail extends StatelessWidget {
-  const _MonthPaniDetail({
-    required this.name,
-    required this.rows,
-    required this.storage,
-  });
-
-  final String name;
-  final List<Map<String, dynamic>> rows;
+class _PaniCategoryDetail extends StatelessWidget {
+  const _PaniCategoryDetail({required this.title, required this.rows, required this.storage, required this.kind});
+  final String title;
+  final List<Map<String,dynamic>> rows;
   final StorageBackupService storage;
+  final String kind;
 
-  int _minutes(Map<String, dynamic> row) {
-    final value = row['minutes'];
-    return value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+  int _n(Map<String,dynamic> r,String k) {final v=r[k];return v is num?v.toInt():int.tryParse('$v')??0;}
+  int _amount(Map<String,dynamic> r) {
+    if(kind=='own') return r['ownMinutes'] is num ? _n(r,'ownMinutes') : (_n(r,'minutes')-_n(r,'borrowedMinutes')).clamp(0,999999);
+    if(kind=='nahar') return r['borrowedNaharMinutes'] is num ? _n(r,'borrowedNaharMinutes') : ((r['borrowedSource']??r['source']??'').toString().toLowerCase().contains('nahar') ? _n(r,'borrowedMinutes'):0);
+    return r['borrowedKuaMinutes'] is num ? _n(r,'borrowedKuaMinutes') : ((r['borrowedSource']??r['source']??'').toString().toLowerCase().contains('kua') ? _n(r,'borrowedMinutes'):0);
   }
-
-  String _formatMinutes(int minutes) => '${minutes ~/ 60}h ${minutes % 60}m';
-
-  @override
-  Widget build(BuildContext context) {
-    final sortedRows = [...rows]
-      ..sort((a, b) =>
-          (DateTime.tryParse(a['date'] as String? ?? '') ?? DateTime(0))
-              .compareTo(DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(0)));
-    final totalMinutes = sortedRows.fold<int>(0, (sum, row) => sum + _minutes(row));
-
-    return Scaffold(
-      appBar: AppBar(title: Text(name, overflow: TextOverflow.ellipsis)),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('TOTAL PANI',
-                      style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 5),
-                  Text(_formatMinutes(totalMinutes),
-                      style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Colors.blue)),
-                  Text('${sortedRows.length} entries'),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          const Text('Pani history',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          ...sortedRows.map((row) {
-            final date = DateTime.tryParse(row['date'] as String? ?? '');
-            final plot = row['plotId'] == null
-                ? 'Khet'
-                : plotLabelForId(storage, row['plotId']);
-            final direction = (row['direction'] ?? 'Apni baari').toString();
-            final source = (row['source'] ?? '').toString();
-            final minutes = _minutes(row);
-            final borrowed = (row['borrowedMinutes'] as num?)?.toInt() ?? 0;
-            final own = (row['ownMinutes'] as num?)?.toInt() ?? minutes;
-            final season = [
-              if (row['season'] != null) row['season'].toString(),
-              if (row['year'] != null) row['year'].toString(),
-            ].join(' ');
-
-            return Card(
-              child: ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.water_drop)),
-                title: Text('$plot · $direction'),
-                subtitle: Text([
-                  if (date != null) DateFormat('dd MMM yyyy').format(date),
-                  _formatMinutes(minutes),
-                  if (source.isNotEmpty) 'Source: $source',
-                  if (borrowed > 0)
-                    'Apna: ${_formatMinutes(own)} · Liya: ${_formatMinutes(borrowed)}',
-                  if (season.isNotEmpty) 'Fasal/Year: $season',
-                  if ((row['note'] ?? '').toString().trim().isNotEmpty) row['note'].toString(),
-                ].join(' · ')),
-                trailing: Text(_formatMinutes(minutes),
-                    style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.blue)),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
+  String _fmt(int m)=>'${m~/60}h ${m%60}m';
+  @override Widget build(BuildContext context) {
+    final sorted=[...rows]..sort((a,b)=>(DateTime.tryParse(a['date']?.toString()??'')??DateTime(0)).compareTo(DateTime.tryParse(b['date']?.toString()??'')??DateTime(0)));
+    final total=sorted.fold<int>(0,(s,r)=>s+_amount(r));
+    return Scaffold(appBar:AppBar(title:Text(title)),body:ListView(padding:const EdgeInsets.all(16),children:[
+      Card(child:ListTile(title:const Text('TOTAL'),trailing:Text(_fmt(total),style:const TextStyle(fontSize:20,fontWeight:FontWeight.bold)))),
+      if(sorted.isEmpty) const Padding(padding:EdgeInsets.all(20),child:Text('Koi record nahi mila.')),
+      ...sorted.map((r){
+        final date=DateTime.tryParse(r['date']?.toString()??'');
+        final plot=r['plotId']==null?'Khet':plotLabelForId(storage,r['plotId']);
+        final contact=(r['borrowedContact']??r['contact']??'').toString();
+        final source=(kind=='own'?(r['source']??r['wellType']??'Apna pani'):(kind=='nahar'?'Nahar':'Kua')).toString();
+        return Card(child:ListTile(
+          title:Text('$plot · $source'),
+          subtitle:Text('${date==null?'':DateFormat('dd MMM yyyy').format(date)}${contact.isEmpty?'':'\nKis se: $contact'}${(r['note']??'').toString().isEmpty?'':'\n${r['note']}'}'),
+          trailing:Text(_fmt(_amount(r)),style:const TextStyle(fontWeight:FontWeight.bold,color:Colors.blue)),
+        ));
+      }),
+    ]));
   }
 }
 
