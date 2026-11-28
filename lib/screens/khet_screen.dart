@@ -927,6 +927,18 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  String? _activeCropCycleId(String plotId, DateTime onDate) {
+    final day = DateTime(onDate.year, onDate.month, onDate.day);
+    final crops = _storage.records('khet').where((row) {
+      if (row['type'] != 'FASAL' || row['plotId'] != plotId || row['harvested'] == true) return false;
+      final parsed = DateTime.tryParse((row['sowingDate'] ?? row['date'] ?? '').toString());
+      return parsed != null && !DateUtils.dateOnly(parsed).isAfter(day);
+    }).toList();
+    crops.sort((a,b) => DateTime.tryParse((b['sowingDate'] ?? b['date'] ?? '').toString())!
+      .compareTo(DateTime.tryParse((a['sowingDate'] ?? a['date'] ?? '').toString())!));
+    return crops.isEmpty ? null : crops.first['cropCycleId']?.toString();
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     final plotMode = widget.initialPlotId != null;
@@ -1051,7 +1063,8 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
             ..['remainingKyaris'] = (totalKyaris - entry.value).clamp(0, totalKyaris)
             ..['fullKilla'] = entry.value == totalKyaris
             ..['season'] = _season
-            ..['year'] = _year;
+            ..['year'] = _year
+            ..['cropCycleId'] = _activeCropCycleId(entry.key, entryDate);
           await _storage.addRecord('khet', plotRecord);
         }
       } else {
