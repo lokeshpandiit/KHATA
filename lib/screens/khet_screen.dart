@@ -1404,7 +1404,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
     }
   }
 
-  bool get _needsFarmDetails => ['FASAL', 'HARA_BEEJ', 'DAWAI', 'KHAD'].contains(widget.type) && !(widget.type == 'DAWAI' && _khalaOnly);
+  bool get _needsFarmDetails => ['FASAL', 'HARA_BEEJ', 'KHAD'].contains(widget.type);
   String get _dateLabel => widget.type == 'FASAL' || widget.type == 'HARA_BEEJ'
       ? 'Beejne ki date' : widget.type == 'KHAD' ? 'Khaad dalne ki date' : 'Dawai dalne ki date';
 
@@ -1550,7 +1550,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
   Future<void> _save() async {
     if (_saving) return;
     final title = _title.text.trim();
-    final price = double.tryParse(_price.text.trim()) ?? 0;
+    final price = widget.type == 'DAWAI' ? 0.0 : (double.tryParse(_price.text.trim()) ?? 0);
     if (_saving) return;
     if (title.isEmpty) {
       _error(widget.type == 'FASAL' ? 'Fasal ka naam likhein' : widget.type == 'DAWAI' ? 'Dawai ka naam likhein' : widget.type == 'KHAD' ? 'Khaad ka naam likhein' : 'Naam likhein');
@@ -1767,24 +1767,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
             )
           else if (!(widget.type == 'DAWAI' && _khalaOnly))
             KhetPlotDropdown(selectedId: _plotId, onChanged: (value) => setState(() => _plotId = value)),
-          if (widget.type == 'DAWAI') ...[
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Khala / kachhe nale par spray'),
-              subtitle: const Text('Is entry ko kisi kille se link na karein'),
-              value: _khalaOnly,
-              onChanged: (value) => setState(() {
-                  _khalaOnly = value;
-                  if (value) { _selectedPlots.clear(); _plotId = null; }
-                  else if (widget.initialPlotId != null) {
-                    _plotId = widget.initialPlotId;
-                    final matches = _storage.records('plots').where((p) => p['id'] == widget.initialPlotId);
-                    if (matches.isNotEmpty) _selectedPlots[widget.initialPlotId!] = (matches.first['totalKyaris'] as num?)?.toInt() ?? 0;
-                  }
-                }),
-            ),
-            if (_khalaOnly) TextField(controller: _areaController, decoration: const InputDecoration(labelText: 'Jagah (optional)', hintText: 'Khala / kacha nala')),
-          ],
+
           if (farmPlot) ...[
             const SizedBox(height: 8),
             if (widget.type == 'DAWAI')
@@ -1885,7 +1868,7 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
               labelText: widget.type == 'DAWAI' ? 'Dawai ka kharcha (₹)' : widget.type == 'KHAD' ? 'Khaad ka kharcha (₹)' : 'Price / kharcha (₹)',
             ),
           ),
-          if (widget.type == 'DAWAI' && !_khalaOnly) ...[
+          if (widget.type == 'DAWAI' && false) ...[
             const SizedBox(height: 8),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
