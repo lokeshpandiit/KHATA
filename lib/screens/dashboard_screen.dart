@@ -1392,6 +1392,7 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     final before = (total - paid).clamp(0, double.infinity).toDouble();
     final amountController = TextEditingController();
     final noteController = TextEditingController();
+    String direction = 'Liya';
     DateTime paymentDate = DateTime.now();
     final result = await showDialog<Map<String, dynamic>>(
       context: context,
@@ -1399,8 +1400,17 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
         title: Text('Kua cash payment · ${original['contact'] ?? 'Person'}'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           Text('Pehle baki: ${widget.money.format(before)}'),
+          DropdownButtonFormField<String>(
+            value: direction,
+            decoration: const InputDecoration(labelText: 'Payment type'),
+            items: const [
+              DropdownMenuItem(value: 'Liya', child: Text('Paise mile')),
+              DropdownMenuItem(value: 'Diya', child: Text('Paise wapas diye')),
+            ],
+            onChanged: (value) => setDialog(() => direction = value ?? direction),
+          ),
           TextField(controller: amountController, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Ab kitne paise mile?')),
+            decoration: InputDecoration(labelText: direction == 'Liya' ? 'Ab kitne paise mile?' : 'Kitne paise wapas diye?')),
           TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Note (optional)')),
           OutlinedButton.icon(
             icon: const Icon(Icons.calendar_today),
@@ -1411,16 +1421,18 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
               if (picked != null) setDialog(() => paymentDate = picked);
             },
           ),
+          Text('Iske baad baki: ${widget.money.format(before + (direction == 'Liya' ? -_amount(amountController.text) : _amount(amountController.text)))}'),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(onPressed: () {
             final amount = double.tryParse(amountController.text.trim()) ?? 0;
-            if (amount <= 0 || amount > before) {
-              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('1 se ${widget.money.format(before)} ke beech rakam bharein')));
+            final limit = direction == 'Liya' ? before : paid;
+            if (amount <= 0 || amount > limit + 0.009) {
+              ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('1 se ${widget.money.format(limit)} ke beech rakam bharein')));
               return;
             }
-            Navigator.pop(ctx, {'amount': amount, 'date': paymentDate, 'note': noteController.text.trim()});
+            Navigator.pop(ctx, {'amount': amount, 'date': paymentDate, 'note': noteController.text.trim(), 'direction': direction});
           }, child: const Text('Save payment')),
         ],
       )),
@@ -1429,21 +1441,23 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     noteController.dispose();
     if (result == null) return;
     final amount = (result['amount'] as num).toDouble();
-    final after = (before - amount).clamp(0, double.infinity).toDouble();
+    direction = result['direction'] as String;
+    final newPaid = direction == 'Liya' ? paid + amount : (paid - amount).clamp(0, double.infinity).toDouble();
+    final after = (total - newPaid).clamp(0, double.infinity).toDouble();
     final history = (original['payments'] as List? ?? const [])
         .whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
     history.add({
       'amount': amount,
-      'direction': 'Diya',
+      'direction': direction,
       'date': (result['date'] as DateTime).toIso8601String(),
       'note': result['note'],
       'balanceBefore': before,
       'balanceAfter': after,
     });
     final updated = Map<String, dynamic>.from(original)
-      ..['cashPaid'] = paid + amount
+      ..['cashPaid'] = newPaid
       ..['cashBalance'] = after
-      ..['cashStatus'] = after <= 0.009 ? 'PAID' : 'PARTIAL'
+      ..['cashStatus'] = after <= 0.009 ? 'PAID' : (newPaid > 0 ? 'PARTIAL' : 'PENDING')
       ..['payments'] = history
       ..['updatedAt'] = DateTime.now().toIso8601String();
     await widget.storage.updateRecord('khet', original['id'].toString(), updated);
@@ -1452,18 +1466,13 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
       if (after <= 0.009) {
         widget.rows.removeAt(index);
       } else {
-        widget.rows[index] = {
-          ...widget.rows[index],
-          'paidAmount': paid + amount,
-          'balance': after,
-          'dashboardBalance': after,
-        };
+        widget.rows[index] = {...widget.rows[index], 'paidAmount': newPaid, 'balance': after, 'dashboardBalance': after};
       }
     }
     if (mounted) setState(() {});
   }
 
-  Future<void> _addPlan() async {
+    Future<void> _addPlan() async {
     final titleController = TextEditingController();
     final noteController = TextEditingController();
     DateTime? scheduledAt;
