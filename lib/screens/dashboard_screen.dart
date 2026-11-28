@@ -39,6 +39,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return (total - paid).clamp(0, double.infinity).toDouble();
   }
 
+  bool _isKhetCostRecord(Map<String, dynamic> row) {
+    final type = row['type'];
+    if (const ['TRACTOR', 'KHET_PURCHASE', 'KHET_EXPENSE'].contains(type)) return true;
+    return const ['DAWAI', 'KHAD', 'OTHER'].contains(type) && _amount(row['price']) > 0;
+  }
+
+  double _khetCostAmount(Map<String, dynamic> row) =>
+      _amount(row['totalAmount'] ?? row['amount'] ?? row['price']);
+
   @override
   Widget build(BuildContext context) {
     final storage = StorageBackupService.instance;
@@ -64,12 +73,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final date = _date(row);
       return date != null && _monthKey(date) == _selectedMonth;
     }
-    final monthHisabAmount = hisabs.where(thisMonth).fold<double>(
-      0, (sum, row) => sum + _amount(row['amount']),
+    final allPersonLedgerRows = <Map<String, dynamic>>[
+      ...hisabs.where((row) => (row['personName'] ?? '').toString().trim().isNotEmpty),
+      ...khet.where((row) => const ['TRACTOR', 'KHET_PURCHASE', 'KHET_PURCHASE_PAYMENT'].contains(row['type']))
+          .map((row) {
+            final person = row['type'] == 'TRACTOR'
+                ? (row['customerName'] ?? row['ownerName'] ?? row['contact'] ?? '').toString()
+                : (row['vendorName'] ?? row['contact'] ?? '').toString();
+            return <String, dynamic>{...row, 'personName': person, 'ledgerSource': 'KHET'};
+          }).where((row) => (row['personName'] ?? '').toString().trim().isNotEmpty),
+    ];
+    final monthPersonRows = allPersonLedgerRows.where(thisMonth).toList();
+    final activePersonCount = monthPersonRows
+        .map((row) => (row['personName'] ?? '').toString().trim().toLowerCase())
+        .where((name) => name.isNotEmpty).toSet().length;
+    final monthPersonAmount = monthPersonRows.fold<double>(
+      0,
+      (sum, row) => sum + _amount(row['totalAmount'] ?? row['amount'] ?? row['price']),
     );
-    final monthKhetAmount = khet.where(thisMonth)
-        .where((row) => row['type'] != 'PANI' && row['type'] != 'TRACTOR')
-        .fold<double>(0, (sum, row) => sum + _amount(row['price']));
+    final expenseRows = <Map<String, dynamic>>[
+      ...khet.where(_isKhetCostRecord),
+      ...hisabs.where((row) => row['category'] == 'Khet' && row['entryType'] == 'EXPENSE'),
+    ];
+    final monthExpenseRows = expenseRows.where(thisMonth).toList();
+    final monthKhetAmount = monthExpenseRows.fold<double>(
+      0, (sum, row) => sum + _khetCostAmount(row),
+    );
     final monthPani = khet.where(thisMonth)
         .where((row) => row['type'] == 'PANI' && row['ledgerMode'] != 'PERSON')
         .fold<int>(0, (sum, row) => sum + ((row['minutes'] as num?)?.toInt() ?? 0));
@@ -92,7 +121,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if(balance>0&&thisMonth(purchase))vendorPending.add({...purchase,'dashboardBalance':balance,'pendingKind':'PURCHASE'});
       }
     }
-    final pending=[...tractorPending,...vendorPending]
+    final khetExpensePending = hisabs
+        .where((row) => row['category'] == 'Khet' && row['entryType'] == 'EXPENSE' && thisMonth(row))
+        .map((row) {
+          final total = _amount(row['totalAmount'] ?? row['amount']);
+          final paid = _amount(row['paidAmount']);
+          return <String, dynamic>{
+            ...row,
+            'dashboardBalance': (total - paid).clamp(0, double.infinity).toDouble(),
+            'pendingKind': 'KHET_EXPENSE',
+          };
+        }).where((row) => _balance(row) > 0).toList();
+    final pending=[...tractorPending,...vendorPending,...khetExpensePending]
       ..sort((a,b)=>(DateTime.tryParse(a['dueDate'] as String? ?? '')??DateTime(9999))
           .compareTo(DateTime.tryParse(b['dueDate'] as String? ?? '')??DateTime(9999)));
     final pendingTotal=pending.fold<double>(0,(sum,row)=>sum+_balance(row));
@@ -139,14 +179,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _MonthPersonLedgerScreen(rows: hisabs.where(thisMonth).toList(), monthTitle: DateFormat('MMMM yyyy').format(selectedDate)),
+              builder: (_) => _MonthPersonLedgerScreen(
+                rows: allPersonLedgerRows,
+                monthTitle: DateFormat('MMMM yyyy').format(selectedDate),
+                selectedMonth: _selectedMonth!,
+              ),
             )),
-            child: _MetricCard(title: '${DateFormat('MMMM yyyy').format(selectedDate)} Hisab', value: money.format(monthHisabAmount), icon: Icons.receipt_long, tint: const Color(0xFFEAF0FA)),
+            child: _MetricCard(title: 'Person-to-person', value: '${activePersonCount} people · ${money.format(monthPersonAmount)}', icon: Icons.people_alt_outlined, tint: const Color(0xFFEAF0FA)),
           )),
         ]),
         const SizedBox(height: 10),
         Row(children: [
-          Expanded(child: InkWell(onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => _KhetExpensesScreen(rows: khet, money: money, initialMonth: _selectedMonth))), child: _MetricCard(title: 'Khet expenses', value: money.format(monthKhetAmount), icon: Icons.agriculture, tint: const Color(0xFFF8EEDC)))),
+          Expanded(child: InkWell(onTap: () => Navigator.push(context, MaterialPageRoute<void>(builder: (_) => _KhetExpensesScreen(rows: [...khet, ...hisabs], money: money, initialMonth: _selectedMonth))), child: _MetricCard(title: 'Khet expenses', value: money.format(monthKhetAmount), icon: Icons.agriculture, tint: const Color(0xFFF8EEDC)))),
           const SizedBox(width: 10),
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
@@ -189,54 +233,220 @@ class _MetricCard extends StatelessWidget {
 }
 
 class _MonthPersonLedgerScreen extends StatelessWidget {
-  const _MonthPersonLedgerScreen({required this.rows, required this.monthTitle});
+  const _MonthPersonLedgerScreen({
+    required this.rows,
+    required this.monthTitle,
+    required this.selectedMonth,
+  });
+
   final List<Map<String, dynamic>> rows;
   final String monthTitle;
+  final String selectedMonth;
 
-  double _amount(dynamic value) => value is num ? value.toDouble() :
-      double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
+  double _amount(dynamic value) => value is num
+      ? value.toDouble()
+      : double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
+
   String _person(Map<String, dynamic> row) {
-    final name = (row['personName'] ?? '').toString().trim();
+    final name = (row['personName'] ?? row['vendorName'] ?? row['customerName'] ?? row['contact'] ?? '').toString().trim();
     return name.isEmpty ? 'Unknown person' : name;
   }
+
+  DateTime? _date(Map<String, dynamic> row) => DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString());
+
   double _delta(Map<String, dynamic> row) {
+    final type = row['type'];
+    if (row['entryType'] == 'EXPENSE' || type == 'KHET_PURCHASE' || type == 'TRACTOR') {
+      final total = _amount(row['totalAmount'] ?? row['amount'] ?? row['price']);
+      return _amount(row['paidAmount']) - total;
+    }
+    if (type == 'KHET_PURCHASE_PAYMENT') return _amount(row['amount']);
     final amount = _amount(row['amount']);
-    return row['direction'] == 'PAID' ? -amount : amount;
+    return row['direction'] == 'PAID' ? amount : -amount;
   }
 
   @override
   Widget build(BuildContext context) {
     final people = <String, List<Map<String, dynamic>>>{};
-    for (final row in rows.where((r) => r['category'] == 'Len-Den')) {
-      people.putIfAbsent(_person(row), () => []).add(row);
+    for (final row in rows) {
+      final name = _person(row);
+      if (name == 'Unknown person') continue;
+      people.putIfAbsent(name, () => []).add(row);
     }
     final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
-    final sorted = people.keys.toList()..sort();
+    final sorted = people.keys.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return Scaffold(
-      appBar: AppBar(title: Text('$monthTitle · Person Hisab')),
+      appBar: AppBar(title: Text('$monthTitle · Person-to-person')),
       body: sorted.isEmpty
-          ? const Center(child: Text('Is month person-to-person Len-Den entries nahi hain.'))
-          : ListView(padding: const EdgeInsets.all(16), children: sorted.map((name) {
-              final personRows = people[name]!..sort((a,b) =>
-                (DateTime.tryParse(b['date'] as String? ?? '') ?? DateTime(0))
-                  .compareTo(DateTime.tryParse(a['date'] as String? ?? '') ?? DateTime(0)));
-              final net = personRows.fold<double>(0, (s,r) => s + _delta(r));
-              return Card(
-                child: ListTile(
-                  title: Text(name, style: const TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: Text('Entries: ${personRows.length} · Tap for full details'),
-                  trailing: Text('${net >= 0 ? '+' : '−'}${money.format(net.abs())}',
-                    style: TextStyle(fontWeight: FontWeight.w800, color: net >= 0 ? Colors.green : Colors.red)),
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                    builder: (_) => _PersonMonthDetailScreen(name: name, rows: personRows),
-                  )),
-                ),
-              );
-            }).toList()),
+          ? const Center(child: Text('Abhi koi person-to-person record nahi hai.'))
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: sorted.map((name) {
+                final personRows = people[name]!;
+                final net = personRows.fold<double>(0, (sum, row) => sum + _delta(row));
+                final monthCount = personRows.where((row) {
+                  final date = _date(row);
+                  return date != null && '${date.year}-${date.month.toString().padLeft(2, '0')}' == selectedMonth;
+                }).length;
+                final status = net > 0.009
+                    ? '₹${money.format(net.abs())} लेना बाकी'
+                    : net < -0.009
+                        ? '₹${money.format(net.abs())} देना बाकी'
+                        : 'हिसाब बराबर ₹0';
+                return Card(
+                  child: ListTile(
+                    leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: Text('$monthCount entries this month · ${personRows.length} total entries'),
+                    trailing: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 145),
+                      child: Text(
+                        status,
+                        textAlign: TextAlign.end,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: net > 0.009 ? Colors.green : net < -0.009 ? Colors.red : Colors.black54,
+                        ),
+                      ),
+                    ),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                      builder: (_) => _PersonMonthDetailScreen(
+                        name: name,
+                        rows: personRows,
+                        monthTitle: monthTitle,
+                        selectedMonth: selectedMonth,
+                      ),
+                    )),
+                  ),
+                );
+              }).toList(),
+            ),
     );
   }
 }
 
+class _PersonMonthDetailScreen extends StatelessWidget {
+  const _PersonMonthDetailScreen({
+    required this.name,
+    required this.rows,
+    required this.monthTitle,
+    required this.selectedMonth,
+  });
+
+  final String name;
+  final List<Map<String, dynamic>> rows;
+  final String monthTitle;
+  final String selectedMonth;
+
+  double _amount(dynamic value) => value is num
+      ? value.toDouble()
+      : double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
+
+  double _delta(Map<String, dynamic> row) {
+    final type = row['type'];
+    if (row['entryType'] == 'EXPENSE' || type == 'KHET_PURCHASE' || type == 'TRACTOR') {
+      return _amount(row['paidAmount']) - _amount(row['totalAmount'] ?? row['amount'] ?? row['price']);
+    }
+    if (type == 'KHET_PURCHASE_PAYMENT') return _amount(row['amount']);
+    return row['direction'] == 'PAID' ? _amount(row['amount']) : -_amount(row['amount']);
+  }
+
+  String _title(Map<String, dynamic> row) {
+    if (row['entryType'] == 'EXPENSE') return '${row['expenseCategory'] ?? 'Khet'} · ${row['title'] ?? 'Kharcha'}';
+    if (row['type'] == 'KHET_PURCHASE') return 'खरीद · ${row['title'] ?? 'Samaan'}';
+    if (row['type'] == 'KHET_PURCHASE_PAYMENT') return 'दुकानदार को भुगतान';
+    if (row['type'] == 'TRACTOR') return 'ट्रैक्टर · ${row['work'] ?? row['title'] ?? 'काम'}';
+    return row['direction'] == 'PAID' ? 'आपने पैसे दिए' : 'आपको पैसे मिले';
+  }
+
+  String _subtitle(Map<String, dynamic> row, NumberFormat money) {
+    final date = DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString());
+    final parts = <String>[
+      if (date != null) DateFormat('dd MMM yyyy').format(date),
+    ];
+    if (row['entryType'] == 'EXPENSE' || row['type'] == 'KHET_PURCHASE' || row['type'] == 'TRACTOR') {
+      final total = _amount(row['totalAmount'] ?? row['amount'] ?? row['price']);
+      final paid = _amount(row['paidAmount']);
+      parts.add('Total ${money.format(total)} · Paid ${money.format(paid)} · Pending ${money.format((total - paid).clamp(0, double.infinity))}');
+      final plot = plotLabelForId(StorageBackupService.instance, row['plotId']);
+      if (plot.isNotEmpty) parts.add(plot);
+      final category = row['expenseCategory'] ?? row['purchaseCategory'];
+      if (category != null && category.toString().isNotEmpty) parts.add(category.toString());
+    } else if (row['type'] == 'KHET_PURCHASE_PAYMENT') {
+      parts.add('Payment ${money.format(_amount(row['amount']))}');
+    } else {
+      parts.add('Amount ${money.format(_amount(row['amount']))}');
+    }
+    final note = (row['note'] ?? '').toString().trim();
+    if (note.isNotEmpty) parts.add(note);
+    return parts.join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...rows]..sort((a, b) =>
+      (DateTime.tryParse((a['date'] ?? a['invoiceDate'] ?? '').toString()) ?? DateTime(0))
+        .compareTo(DateTime.tryParse((b['date'] ?? b['invoiceDate'] ?? '').toString()) ?? DateTime(0)));
+    final net = sorted.fold<double>(0, (sum, row) => sum + _delta(row));
+    final expenseTotal = sorted.where((row) =>
+      row['entryType'] == 'EXPENSE' || row['type'] == 'KHET_PURCHASE' || row['type'] == 'TRACTOR'
+    ).fold<double>(0, (sum, row) => sum + _amount(row['totalAmount'] ?? row['amount'] ?? row['price']));
+    final monthCount = sorted.where((row) {
+      final date = DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString());
+      return date != null && '${date.year}-${date.month.toString().padLeft(2, '0')}' == selectedMonth;
+    }).length;
+    final money = NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+    final status = net > 0.009
+        ? '${money.format(net.abs())} लेना बाकी'
+        : net < -0.009
+            ? '${money.format(net.abs())} देना बाकी'
+            : 'हिसाब बराबर ₹0';
+
+    return Scaffold(
+      appBar: AppBar(title: Text(name, overflow: TextOverflow.ellipsis)),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('NET BALANCE', style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 6),
+              Text(status, style: TextStyle(
+                fontSize: 22, fontWeight: FontWeight.w900,
+                color: net > 0.009 ? Colors.green : net < -0.009 ? Colors.red : Colors.black54,
+              )),
+              const SizedBox(height: 8),
+              Text('Total purchases / expenses: ${money.format(expenseTotal)}'),
+              Text('$monthTitle: $monthCount transactions · All-time history: ${sorted.length}'),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text('Transaction history', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        ...sorted.reversed.map((row) {
+          final delta = _delta(row);
+          final date = DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString());
+          final isCost = row['entryType'] == 'EXPENSE' || row['type'] == 'KHET_PURCHASE' || row['type'] == 'TRACTOR';
+          return Card(child: ListTile(
+            leading: Icon(
+              isCost ? Icons.shopping_bag_outlined
+                  : row['type'] == 'KHET_PURCHASE_PAYMENT' || row['direction'] == 'PAID'
+                      ? Icons.payments_outlined
+                      : Icons.call_received,
+            ),
+            title: Text(_title(row)),
+            subtitle: Text(_subtitle(row, money)),
+            trailing: Text(
+              delta.abs() < 0.009 ? '₹0' : '${delta > 0 ? '+' : '−'}${money.format(delta.abs())}',
+              style: TextStyle(fontWeight: FontWeight.w800, color: delta > 0 ? Colors.green : delta < 0 ? Colors.red : Colors.black54),
+            ),
+          ));
+        }),
+      ]),
+    );
+  }
+}
 
 class _MonthPaniScreen extends StatelessWidget {
   const _MonthPaniScreen({required this.rows, required this.storage, required this.monthTitle});
@@ -399,65 +609,157 @@ class _PersonMonthDetailScreen extends StatelessWidget {
 }
 
 class _KhetExpensesScreen extends StatefulWidget {
- const _KhetExpensesScreen({required this.rows, required this.money, this.initialMonth});
- final List<Map<String,dynamic>> rows;
- final NumberFormat money;
- final String? initialMonth;
- @override State<_KhetExpensesScreen> createState()=>_KhetExpensesScreenState();
+  const _KhetExpensesScreen({required this.rows, required this.money, this.initialMonth});
+  final List<Map<String, dynamic>> rows;
+  final NumberFormat money;
+  final String? initialMonth;
+
+  @override
+  State<_KhetExpensesScreen> createState() => _KhetExpensesScreenState();
 }
-class _KhetExpensesScreenState extends State<_KhetExpensesScreen>{
- String? _selectedMonth;
- String _monthKey(DateTime d)=>'${d.year}-${d.month.toString().padLeft(2,'0')}';
- @override Widget build(BuildContext context){
-  final expenses=widget.rows.where((r)=>r['type']!='PANI'&&r['type']!='TRACTOR').toList();
-  double amount(dynamic v)=>v is num?v.toDouble():double.tryParse(v?.toString()??'')??0;
-  final monthKeys=expenses.map((r)=>DateTime.tryParse(r['date']?.toString()??'')).whereType<DateTime>().map(_monthKey).toSet().toList()..sort((a,b)=>b.compareTo(a));
-  if(_selectedMonth==null && monthKeys.isNotEmpty)_selectedMonth=widget.initialMonth ?? monthKeys.first;
-  if(_selectedMonth!=null && !monthKeys.contains(_selectedMonth))_selectedMonth=monthKeys.isNotEmpty?monthKeys.first:null;
-  final selected=_selectedMonth;
-  final monthly=expenses.where((r){final d=DateTime.tryParse(r['date']?.toString()??'');return d!=null && _monthKey(d)==selected;}).toList()..sort((a,b)=>(DateTime.tryParse(b['date']?.toString()??'')??DateTime(0)).compareTo(DateTime.tryParse(a['date']?.toString()??'')??DateTime(0)));
-  final total=monthly.fold<double>(0,(s,r)=>s+amount(r['price']));
-  return Scaffold(appBar:AppBar(title:const Text('All Khet Expenses')),body:ListView(padding:const EdgeInsets.all(16),children:[
-    if (monthKeys.isNotEmpty)
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              isExpanded: true,
-              value: selected,
-              hint: const Text('Month choose karein'),
-              items: monthKeys.map((key) {
-                final parts = key.split('-');
-                final date = DateTime(int.parse(parts[0]), int.parse(parts[1]));
-                return DropdownMenuItem(value: key, child: Text(DateFormat('MMMM yyyy').format(date)));
-              }).toList(),
-              onChanged: (v) => setState(() => _selectedMonth = v),
+
+class _KhetExpensesScreenState extends State<_KhetExpensesScreen> {
+  String? _selectedMonth;
+
+  String _monthKey(DateTime date) => '${date.year}-${date.month.toString().padLeft(2, '0')}';
+
+  double _amount(dynamic value) => value is num
+      ? value.toDouble()
+      : double.tryParse((value ?? '').toString().replaceAll(',', '').replaceAll('₹', '').trim()) ?? 0;
+
+  bool _isExpense(Map<String, dynamic> row) {
+    if (row['category'] == 'Khet' && row['entryType'] == 'EXPENSE') return true;
+    if (const ['TRACTOR', 'KHET_PURCHASE', 'KHET_EXPENSE'].contains(row['type'])) return true;
+    return const ['DAWAI', 'KHAD', 'OTHER'].contains(row['type']) && _amount(row['price']) > 0;
+  }
+
+  double _total(Map<String, dynamic> row) =>
+      _amount(row['totalAmount'] ?? row['amount'] ?? row['price']);
+
+  String _category(Map<String, dynamic> row) {
+    if (row['expenseCategory'] != null) return row['expenseCategory'].toString();
+    if (row['purchaseCategory'] != null) return row['purchaseCategory'].toString();
+    if (row['type'] == 'TRACTOR') return 'Tractor';
+    if (row['type'] == 'DAWAI') return 'Dawai';
+    if (row['type'] == 'KHAD') return 'Khaad';
+    return 'Other';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final expenses = widget.rows.where(_isExpense).toList();
+    final monthKeys = expenses
+        .map((row) => DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString()))
+        .whereType<DateTime>()
+        .map(_monthKey)
+        .toSet()
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
+    if (_selectedMonth == null && monthKeys.isNotEmpty) {
+      _selectedMonth = widget.initialMonth ?? monthKeys.first;
+    }
+    if (_selectedMonth != null && !monthKeys.contains(_selectedMonth)) {
+      _selectedMonth = monthKeys.isNotEmpty ? monthKeys.first : null;
+    }
+
+    final selected = _selectedMonth;
+    final monthly = expenses.where((row) {
+      final date = DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString());
+      return date != null && _monthKey(date) == selected;
+    }).toList()
+      ..sort((a, b) => (DateTime.tryParse((b['date'] ?? b['invoiceDate'] ?? '').toString()) ?? DateTime(0))
+          .compareTo(DateTime.tryParse((a['date'] ?? a['invoiceDate'] ?? '').toString()) ?? DateTime(0)));
+    final total = monthly.fold<double>(0, (sum, row) => sum + _total(row));
+    final sortedCategories = <String, double>{};
+    for (final row in monthly) {
+      final category = _category(row);
+      sortedCategories[category] = (sortedCategories[category] ?? 0) + _total(row);
+    }
+    final categoryEntries = sortedCategories.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final pending = monthly.fold<double>(0, (sum, row) =>
+        sum + (_total(row) - _amount(row['paidAmount'])).clamp(0, double.infinity));
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('All Khet Expenses')),
+      body: ListView(padding: const EdgeInsets.all(16), children: [
+        if (monthKeys.isNotEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: selected,
+                  hint: const Text('Month choose karein'),
+                  items: monthKeys.map((key) {
+                    final parts = key.split('-');
+                    final date = DateTime(int.parse(parts[0]), int.parse(parts[1]));
+                    return DropdownMenuItem(value: key, child: Text(DateFormat('MMMM yyyy').format(date)));
+                  }).toList(),
+                  onChanged: (value) => setState(() => _selectedMonth = value),
+                ),
+              ),
             ),
           ),
+        Card(
+          child: ListTile(
+            title: Text('${selected == null ? 'All months' : DateFormat('MMMM yyyy').format(DateTime(int.parse(selected.split('-')[0]), int.parse(selected.split('-')[1])))} · ${monthly.length} expense records'),
+            subtitle: Text('Total expense ${widget.money.format(total)} · Pending ${widget.money.format(pending)}'),
+            trailing: const Icon(Icons.account_balance_wallet_outlined),
+          ),
         ),
-      ),
-    Card(
-      child: ListTile(
-        title: Text('${selected == null ? 'All months' : DateFormat('MMMM yyyy').format(DateTime(int.parse(selected.split('-')[0]), int.parse(selected.split('-')[1])))} · ${monthly.length} expense records'),
-        trailing: Text(widget.money.format(total), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-      ),
-    ),
-    if (monthly.isEmpty)
-      const Center(child: Padding(padding: EdgeInsets.all(30), child: Text('Is month ka koi expense record nahi hai.'))),
-    ...monthly.map((r) {
-      final d = DateTime.tryParse(r['date']?.toString() ?? '');
-      return Card(
-        child: ListTile(
-          title: Text(r['type']?.toString() ?? 'Expense'),
-          subtitle: Text('${r['description'] ?? r['name'] ?? ''}${d == null ? '' : '\n' + DateFormat('dd MMM yyyy').format(d)}'),
-          trailing: Text(widget.money.format(amount(r['price']))),
-        ),
-      );
-    }),
-  ]));
- }
+        if (categoryEntries.isNotEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Category-wise expenses', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                ...categoryEntries.map((entry) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text(entry.key),
+                    Text(widget.money.format(entry.value), style: const TextStyle(fontWeight: FontWeight.w700)),
+                  ]),
+                )),
+              ]),
+            ),
+          ),
+        if (monthly.isEmpty)
+          const Center(child: Padding(
+            padding: EdgeInsets.all(30),
+            child: Text('Is month ka koi expense record nahi hai.'),
+          )),
+        ...monthly.map((row) {
+          final date = DateTime.tryParse((row['date'] ?? row['invoiceDate'] ?? '').toString());
+          final amount = _total(row);
+          final paid = _amount(row['paidAmount']);
+          final person = (row['personName'] ?? row['vendorName'] ?? row['customerName'] ?? row['contact'] ?? '').toString().trim();
+          final plot = plotLabelForId(StorageBackupService.instance, row['plotId']);
+          final title = (row['title'] ?? row['work'] ?? row['workType'] ?? _category(row)).toString();
+          final details = <String>[
+            if (date != null) DateFormat('dd MMM yyyy').format(date),
+            if (person.isNotEmpty) 'Person: $person',
+            if (plot.isNotEmpty) plot,
+            'Paid ${widget.money.format(paid)}',
+            'Pending ${widget.money.format((amount - paid).clamp(0, double.infinity))}',
+            if ((row['note'] ?? '').toString().trim().isNotEmpty) row['note'].toString().trim(),
+          ];
+          return Card(
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.agriculture_outlined)),
+              title: Text('${_category(row)} · $title'),
+              subtitle: Text(details.join(' · ')),
+              trailing: Text(widget.money.format(amount), style: const TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          );
+        }),
+      ]),
+    );
+  }
 }
+
 class _PendingPaymentsScreen extends StatefulWidget {
   const _PendingPaymentsScreen({
     required this.rows,
