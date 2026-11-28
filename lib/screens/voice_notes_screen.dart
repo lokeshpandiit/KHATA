@@ -96,27 +96,24 @@ class _VoiceNotesScreenState extends State<VoiceNotesScreen> {
   }
 
   String? _extractAmount(String text) {
-    // Capture numeric amount, including Hindi digits, when spoken in the note.
+    // Normalize Hindi digits and extract spoken numeric amounts.
     final normalized = text
         .replaceAll('०', '0').replaceAll('१', '1').replaceAll('२', '2')
         .replaceAll('३', '3').replaceAll('४', '4').replaceAll('५', '5')
         .replaceAll('६', '6').replaceAll('७', '7').replaceAll('८', '8')
         .replaceAll('९', '9');
-    final matches = RegExp(r'(?<![A-Za-z])(?:₹|rs\.?\s*)?([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?)(?![A-Za-z])', caseSensitive: false).allMatches(normalized);
+    final matches = RegExp(r'([0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?)').allMatches(normalized);
     if (matches.isEmpty) return null;
-    // Prefer a number explicitly tied to rupees/amount; otherwise use the first number.
     for (final match in matches) {
-      final value = match.group(1)?.replaceAll(',', '');
-      if (value == null) continue;
-      final after = normalized.substring(match.end).toLowerCase();
-      final before = normalized.substring(0, match.start).toLowerCase();
-      if (after.startsWith(RegExp(r'\s*(रुपये|रुपए|रुपया|rs|rupees|रू)')) ||
-          RegExp(r'(₹|rs\.?\s*)) return value;
-    }
-    return matches.first.group(1)?.replaceAll(',', '');
-  }
-
-).hasMatch(before)) return value;
+      final amount = match.group(1)?.replaceAll(',', '');
+      if (amount == null) continue;
+      final around = normalized.substring(
+        match.start > 12 ? match.start - 12 : 0,
+        match.end + 12 < normalized.length ? match.end + 12 : normalized.length,
+      ).toLowerCase();
+      if (around.contains('₹') || around.contains('रुप') || around.contains('rs') || around.contains('rupee')) {
+        return amount;
+      }
     }
     return matches.first.group(1)?.replaceAll(',', '');
   }
