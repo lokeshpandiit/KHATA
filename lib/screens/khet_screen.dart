@@ -714,13 +714,19 @@ class _KhetScreenState extends State<KhetScreen> {
           subtitle: Text(
             personLedger
                 ? '${row['direction'] == 'Diya' ? '+' : '−'}${formatMinutes(minutes)}'
-                    '${dateText.isEmpty ? '' : '\\n$dateText'}'
-                    '${(row['note'] as String? ?? '').isNotEmpty ? '\\n${row['note']}' : ''}'
+                    '${dateText.isEmpty ? '' : '
+$dateText'}'
+                    '${(row['note'] as String? ?? '').isNotEmpty ? '
+${row['note']}' : ''}'
                 : '${formatMinutes(minutes)}'
-                    '${row['wetKyaris'] == null ? '' : '\\nBheegi: ${row['wetKyaris']} / ${row['totalKyarisSnapshot'] ?? '-'} · Baaki: ${row['remainingKyaris'] ?? '-'}'}'
-                    '${row['season'] == null ? '' : '\\n${row['season']} ${row['year'] ?? ''}'}'
-                    '${(row['note'] as String? ?? '').isNotEmpty ? '\\n${row['note']}' : ''}'
-                    '${date == null ? '' : '\\n${timeLabel(date)}'}',
+                    '${row['wetKyaris'] == null ? '' : '
+Bheegi: ${row['wetKyaris']} / ${row['totalKyarisSnapshot'] ?? '-'} · Baaki: ${row['remainingKyaris'] ?? '-'}'}'
+                    '${row['season'] == null ? '' : '
+${row['season']} ${row['year'] ?? ''}'}'
+                    '${(row['note'] as String? ?? '').isNotEmpty ? '
+${row['note']}' : ''}'
+                    '${date == null ? '' : '
+${timeLabel(date)}'}',
           ),
           isThreeLine: true,
           trailing: Row(
@@ -1750,7 +1756,8 @@ class _AddKhetItemScreenState extends State<AddKhetItemScreen> {
                       final cropName = crop == null ? 'Fasal record nahi hai' :
                           (crop['cropName'] ?? crop['title'] ?? 'Fasal').toString();
                       return '${plotLabel(plot)}: $cropName';
-                    }).join('\\n'),
+                    }).join('
+'),
                   ),
                 ),
               ),
