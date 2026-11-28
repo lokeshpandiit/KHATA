@@ -18,6 +18,7 @@ class KhetPlotDetailsSheet extends StatefulWidget {
 class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
   String _season = 'Rabi';
   int _year = DateTime.now().year;
+  String? _selectedCropCycleId;
 
   DateTime? _date(Map<String, dynamic> row) {
     for (final key in ['date', 'sowingDate', 'applicationDate']) {
@@ -160,11 +161,17 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
     return ValueListenableBuilder<int>(
       valueListenable: storage.revision,
       builder: (context, _, __) {
-        final entries = _latest(storage.records('khet').where((row) =>
-          row['plotId'] == widget.plot['id'] &&
-          row['season'] == _season &&
-          row['year'] == _year
-        ).toList());
+        final plotRecords = storage.records('khet').where((row) => row['plotId'] == widget.plot['id']).toList();
+        final cropCycles = _latest(plotRecords.where((row) => row['type'] == 'FASAL').toList());
+        final selectedCycle = cropCycles.where((row) => row['cropCycleId'] == _selectedCropCycleId).toList().firstOrNull ??
+            cropCycles.where((row) => row['harvested'] != true).toList().firstOrNull ??
+            cropCycles.firstOrNull;
+        final selectedCycleId = selectedCycle?['cropCycleId']?.toString();
+        if (_selectedCropCycleId == null && selectedCycleId != null) _selectedCropCycleId = selectedCycleId;
+        final entries = _latest(plotRecords.where((row) {
+          if (selectedCycleId != null && row['cropCycleId'] != null) return row['cropCycleId'] == selectedCycleId;
+          return row['season'] == _season && row['year'] == _year;
+        }).toList());
         final pani = entries.where((row) => row['type'] == 'PANI').toList();
         final crops = entries.where((row) => row['type'] == 'FASAL').toList();
         final fodder = entries.where((row) => row['type'] == 'HARA_BEEJ').toList();
@@ -194,14 +201,31 @@ class _KhetPlotDetailsSheetState extends State<KhetPlotDetailsSheet> {
               if ((widget.plot['name'] as String? ?? '').isNotEmpty)
                 Text(widget.plot['name'] as String, style: const TextStyle(color: Colors.black54)),
               const SizedBox(height: 10),
-              SeasonYearFields(
-                season: _season,
-                year: _year,
-                onSeasonChanged: (value) => setState(() => _season = value),
-                onYearChanged: (value) => setState(() => _year = value),
-              ),
+              if (cropCycles.isNotEmpty)
+                DropdownButtonFormField<String>(
+                  value: selectedCycleId,
+                  decoration: const InputDecoration(labelText: 'Crop Cycle / Purani Fasal'),
+                  items: cropCycles.map((crop) {
+                    final cropTitle = (crop['cropName'] ?? crop['title'] ?? 'Fasal').toString();
+                    final date = _date(crop);
+                    final status = crop['harvested'] == true ? ' · Complete' : ' · Current';
+                    return DropdownMenuItem<String>(
+                      value: crop['cropCycleId']?.toString(),
+                      child: Text(cropTitle + (date == null ? '' : ' · ${DateFormat('dd MMM yyyy').format(date)}') + status,
+                        overflow: TextOverflow.ellipsis),
+                    );
+                  }).where((item) => item.value != null).toList(),
+                  onChanged: (value) => setState(() => _selectedCropCycleId = value),
+                )
+              else
+                SeasonYearFields(
+                  season: _season,
+                  year: _year,
+                  onSeasonChanged: (value) => setState(() => _season = value),
+                  onYearChanged: (value) => setState(() => _year = value),
+                ),
               const SizedBox(height: 8),
-              Text('Sirf $_season $_year ka khet record', style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              Text(selectedCycle == null ? 'Purana season/year record' : 'Selected crop ka record', style: const TextStyle(fontSize: 12, color: Colors.black54)),
               const SizedBox(height: 10),
               Expanded(
                 child: ListView(children: [
