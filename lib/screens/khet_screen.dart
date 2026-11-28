@@ -1005,6 +1005,9 @@ class _AddPaniScreenState extends State<AddPaniScreen> {
         'minutes': minutes,
         'note': _note.text.trim(),
         'date': entryDate.toIso8601String(),
+        'borrowedSource': plotMode ? (_borrowedWater ? _borrowedSource : null) : (_direction == 'Liya' ? _wellType : null),
+        'borrowedNaharMinutes': plotMode && _borrowedWater ? (int.tryParse(_borrowedNaharMinutes.text.trim()) ?? 0) : (!plotMode && _direction == 'Liya' && _wellType.toLowerCase().contains('nahar') ? minutes : 0),
+        'borrowedKuaMinutes': plotMode && _borrowedWater ? (int.tryParse(_borrowedKuaMinutes.text.trim()) ?? 0) : (!plotMode && _direction == 'Liya' && !_wellType.toLowerCase().contains('nahar') ? minutes : 0),
       };
 
       if (plotMode) {
