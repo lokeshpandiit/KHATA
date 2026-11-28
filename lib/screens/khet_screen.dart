@@ -26,17 +26,11 @@ class KhetScreen extends StatefulWidget {
 
 class _KhetScreenState extends State<KhetScreen> {
   final _storage = StorageBackupService.instance;
-  final _search = TextEditingController();
   String _tab = 'ALL';
   String _month = 'All months';
   String _seasonFilter = 'All seasons';
   int? _yearFilter;
 
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
 
   List<Map<String, dynamic>> get _entries => _storage.records('khet');
   List<Map<String, dynamic>> get _contacts => _storage.records('contacts');
@@ -56,7 +50,6 @@ class _KhetScreenState extends State<KhetScreen> {
   }
 
   List<Map<String, dynamic>> get _filtered {
-    final query = _search.text.trim().toLowerCase();
     return _entries.where((row) {
       final date = DateTime.tryParse(row['date'] as String? ?? '');
       final category = row['type'] as String? ?? '';
@@ -80,7 +73,7 @@ class _KhetScreenState extends State<KhetScreen> {
       final searchable =
           '${row['title'] ?? ''} ${row['note'] ?? ''} ${row['contact'] ?? ''} ${row['source'] ?? ''} ${row['wellType'] ?? ''} ${row['customerName'] ?? ''} ${row['farmName'] ?? ''} ${row['work'] ?? ''} ${row['cropName'] ?? ''} ${row['seedName'] ?? ''} ${row['purpose'] ?? ''}'
               .toLowerCase();
-      return typeMatch && monthMatch && seasonMatch && yearMatch && searchable.contains(query);
+      return typeMatch && monthMatch && seasonMatch && yearMatch;
     }).toList()
       ..sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
   }
@@ -119,7 +112,7 @@ class _KhetScreenState extends State<KhetScreen> {
       context: context,
       builder: (context) => SafeArea(
         child: Wrap(
-          children: ['PURCHASE', 'DAWAI', 'KHAD', 'FASAL', 'TRACTOR', 'OTHER']
+          children: ['KUA', 'TRACTOR', 'OTHER']
               .map((item) => ListTile(
                     leading: Icon(item == 'TRACTOR' ? Icons.agriculture : Icons.add_circle_outline),
                     title: Text(item),
@@ -547,7 +540,7 @@ class _KhetScreenState extends State<KhetScreen> {
     final months = availableMonths(_entries);
     if (!months.contains(_month)) _month = 'All months';
     final rows = _filtered;
-    const tabs = ['ALL', 'PURCHASE', 'DAWAI', 'KHAD', 'FASAL', 'TRACTOR', 'KUA', 'OTHER'];
+    const tabs = ['ALL', 'KUA', 'TRACTOR', 'OTHER'];
     final addLabel = switch (_tab) {
       'DAWAI' => 'Add Dawai',
       'KHAD' => 'Add Khaad',
@@ -567,8 +560,6 @@ class _KhetScreenState extends State<KhetScreen> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
             child: Column(
               children: [
-                searchField((_) => setState(() {})),
-                const SizedBox(height: 10),
                 monthFilter(_month, months, (value) {
                   if (value != null) setState(() => _month = value);
                 }),
