@@ -202,7 +202,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Expanded(child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => _PendingPaymentsScreen(rows: pending, waterRows: khet.where((r) => r['type'] == 'PANI' && r['waterPaymentPending'] == true && thisMonth(r)).toList(), money: money, storage: storage, monthTitle: DateFormat('MMMM yyyy').format(selectedDate)),
+              builder: (_) => _PendingPaymentsScreen(rows: pending, waterRows: khet.where((r) => ((r['type'] == 'PANI' && r['waterPaymentPending'] == true) || (r['type'] == 'KUA' && _amount(r['waterRemainingMinutes'] ?? r['exchangeMinutes']) > 0)) && thisMonth(r)).toList(), money: money, storage: storage, monthTitle: DateFormat('MMMM yyyy').format(selectedDate)),
             )),
             child: _MetricCard(title: 'Pending payments', value: money.format(pendingTotal), icon: Icons.pending_actions, tint: const Color(0xFFE5F2EC)),
           )),
@@ -856,8 +856,9 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
         .toDouble();
   }
 
-  int _waterOwedMinutes(Map<String, dynamic> row) =>
-      _amount(row['borrowedMinutes']).toInt() + _amount(row['borrowedNaharMinutes']).toInt() + _amount(row['borrowedKuaMinutes']).toInt();
+  int _waterOwedMinutes(Map<String, dynamic> row) => row['type'] == 'KUA'
+      ? _amount(row['waterOwedMinutes'] ?? row['exchangeMinutes']).toInt()
+      : _amount(row['borrowedMinutes']).toInt() + _amount(row['borrowedNaharMinutes']).toInt() + _amount(row['borrowedKuaMinutes']).toInt();
 
   int _waterExchangedMinutes(Map<String, dynamic> row) {
     final history = row['waterExchangeHistory'];
@@ -900,7 +901,8 @@ class _PendingPaymentsScreenState extends State<_PendingPaymentsScreen> {
     if (saved != true) { noteController.dispose(); minutesController.dispose(); return; }
     final updated = Map<String, dynamic>.from(row);
     final history = row['waterExchangeHistory'] is List ? List<Map<String, dynamic>>.from((row['waterExchangeHistory'] as List).whereType<Map>().map((e) => Map<String, dynamic>.from(e))) : <Map<String, dynamic>>[];
-    if (status == 'WATER_EXCHANGE') { final minutes = int.parse(minutesController.text.trim()); final before = (owed - totalExchanged).clamp(0, 999999); history.add({'minutes': minutes, 'date': exchangeDate.toIso8601String(), 'note': noteController.text.trim(), 'balanceBefore': before, 'balanceAfter': (before - minutes).clamp(0, 999999)}); }
+    final totalExchangedBefore = history.fold<int>(0, (sum, e) => sum + _amount(e['minutes']).toInt());
+    if (status == 'WATER_EXCHANGE') { final minutes = int.parse(minutesController.text.trim()); final before = (owed - totalExchangedBefore).clamp(0, 999999); history.add({'minutes': minutes, 'date': exchangeDate.toIso8601String(), 'note': noteController.text.trim(), 'balanceBefore': before, 'balanceAfter': (before - minutes).clamp(0, 999999)}); }
     final totalExchanged = history.fold<int>(0, (sum, e) => sum + _amount(e['minutes']).toInt());
     final left = (owed - totalExchanged).clamp(0, 999999);
     updated
