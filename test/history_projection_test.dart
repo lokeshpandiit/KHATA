@@ -165,5 +165,32 @@ void main() {
       expect(waterExchange.subtitle, contains('30 min'));
       expect(waterExchange.date, DateTime(2026, 11, 28, 13));
     });
+    test('backdated entry sorts by the time it was entered, but displays its backdated date', () {
+      final entries = HistoryProjection.build(
+        hisabs: [
+          {
+            'id': 'backdated',
+            'title': 'Old work entered today',
+            'date': '2026-11-20T08:00:00',
+            'createdAt': '2026-11-30T19:00:00',
+            'amount': 100,
+          },
+          {
+            'id': 'recent',
+            'title': 'Earlier entry today',
+            'date': '2026-11-30T18:00:00',
+            'createdAt': '2026-11-30T18:00:00',
+            'amount': 200,
+          },
+        ],
+        khet: const [],
+        members: const [],
+        products: const [],
+      );
+      expect(entries.first.title, 'Old work entered today');
+      expect(entries.first.date, DateTime(2026, 11, 20, 8));
+      expect(entries.first.sortDate, DateTime(2026, 11, 30, 19));
+    });
+
   });
 }
